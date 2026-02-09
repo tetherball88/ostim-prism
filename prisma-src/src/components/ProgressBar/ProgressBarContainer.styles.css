@@ -1,0 +1,8 @@
+.progress-bar-container {
+    position: absolute;
+    bottom: 20px;
+    left: 300px;
+    display: flex;
+    gap: 20px;
+    max-width: 30%;
+}

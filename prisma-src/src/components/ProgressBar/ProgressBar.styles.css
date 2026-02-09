@@ -1,0 +1,73 @@
+
+.circular-progress {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+
+
+.circular-progress .progress-bg {
+    fill: none;
+    /* stroke: rgba(255, 255, 255, 0.1); */
+}
+
+.circular-progress .progress-fill {
+    fill: none;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+.circular-progress.high-progress .progress-fill {
+    -webkit-animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite;
+    animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite;
+}
+
+@-webkit-keyframes glow-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+@keyframes glow-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.circular-progress .progress-label {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 22px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    /* High-Contrast text protection */
+    text-shadow:
+        -1px -1px 0 #000, 1px -1px 0 #000,
+        -1px 1px 0 #000, 1px 1px 0 #000,
+        2px 2px 3px rgba(0,0,0,1);
+    margin: 0;
+    
+    max-width: 100%;
+}
+
+.circular-progress .progress-name {
+    padding: 10px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #fff;
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

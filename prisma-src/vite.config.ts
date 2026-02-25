@@ -15,6 +15,7 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, '../PrismaUI/views/OStim'),
     emptyOutDir: true,
+    minify: false,
   },
   // publicDir: resolve(__dirname, '../data/Interface/OStim/icons')
 })

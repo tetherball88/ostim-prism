@@ -1,16 +1,20 @@
 
 .circular-progress {
+    --pb-size: 8rem;
     position: relative;
     display: inline-flex;
+    flex-direction: column;   /* SVG on top, name below */
     align-items: center;
-    justify-content: center;
     overflow: visible;
-}
 
+    /* Dark radial vignette so arcs read against any game background.
+     * Center is offset toward the top (45%) because the horseshoe gap
+     * is at the bottom — the dark mass should follow the arc mass. */
+    background: radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.48) 25%, transparent 68%);
+}
 
 .circular-progress .progress-bg {
     fill: none;
-    /* stroke: rgba(255, 255, 255, 0.1); */
 }
 
 .circular-progress .progress-fill {
@@ -18,56 +22,77 @@
     transition: stroke-dashoffset 0.3s ease;
 }
 
+/* At ≥75% excitement the arc glows with the actor's gender color.
+ * filter: drop-shadow pulses the arc itself rather than fading the whole
+ * element — the stroke swells with light rather than blinking. */
 .circular-progress.high-progress .progress-fill {
-    -webkit-animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite;
-    animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite;
+    /* -webkit-animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite;
+    animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite; */
+    /* filter: drop-shadow(0 0 4px #00ffff); */
+    animation: glow-pulse var(--pulse-duration, 1.5s) infinite ease-in-out;
 }
 
-@-webkit-keyframes glow-pulse {
+@keyframes glow-pulse {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+}
+
+/* @-webkit-keyframes glow-pulse {
     0%, 100% {
-        opacity: 1;
+        -webkit-filter: drop-shadow(0 0 2px var(--glow-color));
+        filter: drop-shadow(0 0 2px var(--glow-color));
     }
     50% {
-        opacity: 0.5;
+        -webkit-filter: drop-shadow(0 0 10px var(--glow-color));
+        filter: drop-shadow(0 0 10px var(--glow-color));
     }
 }
 
 @keyframes glow-pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
+    0%, 100% { filter: drop-shadow(0 0 2px var(--glow-color)); }
+    50%       { filter: drop-shadow(0 0 10px var(--glow-color)); }
+} */
+
+/* Percentage number inside the ring. fill color is set inline (gender color)
+ * so the number is visually tied to its arc without needing to parse arc length. */
+.circular-progress .progress-percentage {
+    font-family: 'OStimPrism', sans-serif;
+    /* font-size is set as an SVG user-unit attribute (fontSize prop) so it
+     * scales correctly with the viewBox — rem here would not respect scaling. */
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    /* Four-direction outline for readability over any background */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9))
+            drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.9))
+            drop-shadow(1px 0 2px rgba(0, 0, 0, 0.9))
+            drop-shadow(-1px 0 2px rgba(0, 0, 0, 0.9));
 }
 
+/* Label sits below the ring in normal flow.
+ * margin-top clears the outer arcs which overflow their SVG box by ~3px. */
 .circular-progress .progress-label {
-    position: absolute;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    font-family: "Segoe UI", "Arial", sans-serif;
-    font-size: 22px;
+    margin-top: 0.4rem;
     text-transform: uppercase;
     letter-spacing: 1px;
     /* High-Contrast text protection */
     text-shadow:
         -1px -1px 0 #000, 1px -1px 0 #000,
-        -1px 1px 0 #000, 1px 1px 0 #000,
-        2px 2px 3px rgba(0,0,0,1);
-    margin: 0;
-    
-    max-width: 100%;
+        -1px 1px 0 #000,  1px 1px 0 #000,
+        2px 2px 3px rgba(0, 0, 0, 1);
 }
 
+/* Name has the full SVG width now that it's outside the ring —
+ * longer character names survive without truncating. */
 .circular-progress .progress-name {
-    padding: 10px;
-    font-size: 1rem;
-    font-weight: bold;
-    color: #fff;
-    max-width: 100px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #b8ad94;
+    max-width: 8.5rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: center;
 }

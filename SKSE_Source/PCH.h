@@ -11,4 +11,7 @@
 #include <string>
 #include <algorithm>
 
+#include <nlohmann/json.hpp>
+
 using namespace std::literals;
+using json = nlohmann::json;

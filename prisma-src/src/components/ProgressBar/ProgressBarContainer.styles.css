@@ -1,8 +1,8 @@
 .progress-bar-container {
     position: absolute;
     bottom: 20px;
-    left: 300px;
+    left: 1vw; /* ~16vw ≈ 307px at 1920px; scales with resolution */
     display: flex;
-    gap: 20px;
+    gap: 40px;
     max-width: 30%;
 }

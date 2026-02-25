@@ -1,28 +1,135 @@
+/* ============================================================
+ * Design Tokens
+ * All layout positions and colors are defined here so that
+ * the entire HUD can be repositioned or recolored in one place.
+ * ============================================================ */
+:root {
+    /* --- Layout anchors ---
+     * Adjust these to move the entire HUD as a unit.
+     * All components reference these rather than hardcoding positions.
+     */
+    --control-buttons-size: 4rem;
+    --hud-bottom: 14rem;          /* vertical anchor for panels & controls */
+    --hud-left-edge: calc(1vw + var(--control-buttons-size) + 60px);       /* left panel / nav list left edge        */
+    --hud-right-edge: 120px;      /* right panels (search / alignment)      */
+    --hud-progress-left: 16vw;    /* progress rings — ~307px at 1920px      */
+
+    /* --- Amber-gold accent palette ---
+     * Warm iron-lantern tone that reads as "ancient magic" without being
+     * garish. Used for all interactive chrome: borders, active states,
+     * focus rings, scrollbar thumbs, selector highlights.
+     */
+    --amber:        #c8a84b;                       /* main accent           */
+    --amber-light:  #e8c96a;                       /* hover / focus         */
+    --amber-dim:    rgba(200, 168, 75, 0.35);      /* decorative borders    */
+    --amber-glow:   rgba(200, 168, 75, 0.10);      /* active bg tint        */
+    --amber-border: rgba(200, 168, 75, 0.18);      /* panel outer border    */
+
+    /* --- Panel surfaces ---
+     * Warm near-black with a hint of brown (not pure #000 / #161616).
+     * Reads as dark stone / aged iron rather than generic dark-mode.
+     */
+    --panel-bg:             linear-gradient(140deg, rgba(16, 14, 8, 0.5), rgba(8, 7, 4, 0.5));
+    --panel-border-subtle:  rgba(200, 168, 75, 0.15);
+    --panel-shadow:         0 1.25em 2.5em rgba(0, 0, 0, 0.60);
+
+    /* --- Type scale ---
+     * Single definition shared by all panels.
+     * Override per-component only when a different cap is intentional.
+     */
+    --text-scale: max(min(0.85vw, 30px), 15px);
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('/assets/font/OStimPrism-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('/assets/font/OStimPrism-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('/assets/font/OStimPrism-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('/assets/font/OStimPrism-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
     user-select: none;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'OStimPrism', sans-serif;
+}
+
+html {
+    font-size: var(--text-scale);
 }
 
 body {
     background: transparent;
     color: #ffffff;
-    min-height: 100vh;
-    padding: 20px;
 }
 
-/* .ui-container {
-    max-width: 800px;
-    margin: 0 auto;
-    background: rgba(0, 0, 0, 0.8);
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-} */
+/* Bottom anchor — horizontal rule at the panel base level so all left and
+ * right components appear to sit on a shared ground line.
+ * Positioned at --hud-bottom (same as the panels), not at screen bottom. */
+body::after {
+    content: '';
+    position: fixed;
+    bottom: var(--hud-bottom);
+    left: calc(1vw + 2px);
+    width: calc(30em);
+    height: 2px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(200, 168, 75, 0.55) 0%,
+        rgba(200, 168, 75, 0.55) 75%,
+        transparent 100%
+    );
+    box-shadow: 0 0 8px rgba(200, 168, 75, 0.30);
+    pointer-events: none;
+    z-index: 9999;
+}
 
+.ui-container {
+    width: 100vw;
+    height: 100vh;
+    background-size: cover;
+    background-position: center;
+}
 
+.buttons-section {
+    position: absolute;
+    bottom: var(--hud-bottom);
+    left: 1vw;           /* viewport-relative so it scales consistently */
+}
 
+.menu-section {
+    position: fixed;
+    left: var(--hud-left-edge);
+    bottom: var(--hud-bottom);
+    width: 30em;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.focus-buttons .menu-section {
+    filter: blur(2px);
+    opacity: 0.6;
+    pointer-events: none;
+}

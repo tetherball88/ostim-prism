@@ -4,3 +4,7 @@
 /.vscode
 /prisma-src/.vite
 /prisma-src/node_modules
+SKSE_Source/extern/CommonLibSSE-NG/
+prisma-src/public/ScreenShot183.png
+skyrimse.ppj
+SkyrimSE.code-workspace

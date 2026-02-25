@@ -3,8 +3,14 @@
 #include <spdlog/spdlog.h>
 
 #include "PCH.h"
+#include "src/OstimNG-API-Thread.h"
+#include "src/OStimDataProvider.h"
+#include "src/PrismaUIManager.h"
+#include "src/Settings.h"
+#include "src/Papyrus.h"
 
 using namespace SKSE;
+
 
 namespace {
     void SetupLogging() {
@@ -55,6 +61,12 @@ SKSEPluginLoad(const LoadInterface* skse) {
     SetupLogging();
     SKSE::log::info("OstimPrism plugin loading...");
 
+    auto papyrus = SKSE::GetPapyrusInterface();
+    if (!papyrus->Register(Papyrus::Register)) {
+        SKSE::log::critical("Failed to register papyrus callback");
+        return false;
+    }
+
     if (const auto* messaging = SKSE::GetMessagingInterface()) {
         if (!messaging->RegisterListener([](SKSE::MessagingInterface::Message* message) {
                 switch (message->type) {
@@ -70,6 +82,31 @@ SKSEPluginLoad(const LoadInterface* skse) {
 
                     case SKSE::MessagingInterface::kDataLoaded: {
                         SKSE::log::info("Data loaded successfully.");
+
+                        // Load settings
+                        Settings::GetSingleton()->Load();
+
+                        // Initialize OStim data provider and PrismaUI manager
+                        OStimDataProvider::GetSingleton()->Initialize();
+
+                        PrismaUIManager::GetSingleton()->Initialize();
+
+                        // Register event callback with OStim Thread API
+                        auto threadAPI = OstimNG_API::Thread::GetAPI("OStim Prism", REL::Version(1, 0, 0));
+                        if (threadAPI) {
+                            threadAPI->RegisterEventCallback(PrismaUIManager::OnThreadEvent, nullptr);
+                            threadAPI->RegisterControlCallback(PrismaUIManager::OnControlInput, nullptr);
+                            
+                            // Only disable OStim's Flash UI if PrismaUI is actually available
+                            if (PrismaUIManager::GetSingleton()->IsAvailable()) {
+                                threadAPI->SetExternalUIEnabled(true);
+                                SKSE::log::info("Registered OStim callbacks and enabled external UI (PrismaUI available)");
+                            } else {
+                                SKSE::log::warn("PrismaUI not available, OStim Flash UI will be used");
+                            }
+                        } else {
+                            SKSE::log::error("Failed to get OStim Thread API");
+                        }
 
                         if (auto* console = RE::ConsoleLog::GetSingleton()) {
                             console->Print("OstimPrism: Ready");

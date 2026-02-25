@@ -1,0 +1,69 @@
+.control-buttons {
+    position: relative;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    padding: 0.5em 0.4em;
+
+    /* Subtle grounding surface — fades upward so the strip reads as
+     * part of the bottom HUD rather than a floating element. */
+    background: linear-gradient(180deg, transparent 0%, rgba(14, 12, 8, 0.50) 100%);
+    border-left: 2px solid var(--amber-dim);
+}
+
+/* Animated indicator — slides between buttons on hover / active change. */
+.control-button-indicator {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    border: 2px solid var(--amber);
+    background: var(--amber-glow);
+    box-shadow: 0 0 8px var(--amber-dim);
+    transition: top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease, opacity 0.15s ease;
+    box-sizing: border-box;
+}
+
+/* Each button is a column: icon on top, short label below. */
+.control-button {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+    padding: 0.2em;
+    width: calc(var(--control-buttons-size) + 8px); 
+    box-sizing: border-box;
+}
+
+.control-button img {
+    display: block;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+}
+
+.control-button-label {
+    display: block;
+    font-size: 0.9em;
+    color: rgba(184, 173, 148, 0.65);   /* muted warm grey — secondary to the icon */
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    text-align: center;
+    line-height: 1.25;
+    min-width: var(--control-buttons-size);    /* wraps 'Utility Options' to two short lines */
+    width: var(--control-buttons-size);
+    box-sizing: border-box;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.9);
+    transition: color 0.15s ease;
+}
+
+/* The indicator handles the border/background — just brighten icon and label. */
+.focus-buttons .control-button.active img {
+    opacity: 1;
+}
+
+.control-button.active .control-button-label {
+    color: var(--amber);
+}

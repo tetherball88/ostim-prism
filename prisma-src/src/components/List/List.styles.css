@@ -1,0 +1,151 @@
+@property --top-mask-threshold {
+    syntax: '<percentage>';
+    inherits: true;
+    initial-value: 20%;
+}
+@property --bottom-mask-threshold {
+    syntax: '<percentage>';
+    inherits: true;
+    initial-value: 80%;
+}
+/*
+ * List Scale System
+ * Uses viewport-relative units for resolution independence:
+ *   - 0.85vw ≈ 16px at 1080p, 22px at 1440p, 32px at 4K
+ *   - Slightly larger caps than panels (32/16) to compensate for
+ *     the open-layout rendering (no enclosing panel padding).
+ */
+.list {
+    font-size: max(min(0.85vw, 32px), 16px); /* BASE SCALE - scales with screen resolution */
+    max-height: 50vh;
+    overflow: hidden;
+    transition: --top-mask-threshold 0.25s ease, --bottom-mask-threshold 0.25s ease;
+
+    /* Dark warm stone surface — fades horizontally so the right edge
+     * dissolves into the game world rather than cutting off abruptly. */
+    background: linear-gradient(
+        90deg,
+        rgba(14, 12, 8, 0.72) 0%,
+        rgba(14, 12, 8, 0.40) 65%,
+        transparent 100%
+    );
+
+    /* 20% fade zones make the "scroll beyond" signal unambiguous. */
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        black var(--top-mask-threshold),
+        black var(--bottom-mask-threshold),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        black var(--top-mask-threshold),
+        black var(--bottom-mask-threshold),
+        transparent 100%
+    );
+}
+
+.list.bottom {
+    --bottom-mask-threshold: 100%;
+}
+
+.list.top {
+    --top-mask-threshold: 0%;
+}
+
+/* Item count — sits above the list window, outside the overflow/mask.
+ * Uses the same font-size formula and positioning anchor as the nav list
+ * so it aligns correctly at every resolution. */
+.list-count {
+    position: absolute;
+    left: 0;
+    top: -2.2em;
+    font-size: 1.5em;
+    color: var(--amber);
+    opacity: 0.70;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.9), -1px -1px 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    /* Ornamental cap — amber line that visually closes the top of the nav area. */
+    padding-bottom: 0.45em;
+    border-bottom: 1px solid;
+    border-image: linear-gradient(90deg, var(--amber) 0%, transparent 75%) 1;
+}
+
+.list-container {
+    position: relative;
+    z-index: 1;
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0.3, 1);
+}
+
+/* Smooth sliding selector — amber accent with an inset torch-light glow. */
+.list-selector {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 4em;         /* 64px at 16px base */
+    background: linear-gradient(
+        90deg,
+        rgba(200, 168, 75, 0.18) 0%,
+        rgba(0, 0, 0, 0.35) 45%,
+        transparent 100%
+    );
+    border-left: 0.25em solid var(--amber);  /* 4px at 16px base */
+    box-shadow: inset 4px 0 14px rgba(200, 168, 75, 0.25);
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0.3, 1);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.list-item {
+    position: relative;
+    z-index: 1;
+    height: 4em;         /* 64px at 16px base */
+    padding: 0 1.875em 0 0;  /* 0 30px 0 0 at 16px base */
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: padding-left 0.2s ease;
+    box-sizing: border-box;
+}
+
+.list-item.active {
+    padding-left: 2.8125em;  /* 45px at 16px base */
+}
+
+/* Icon — prevent squishing if labels are long; dim inactive items so
+ * the active icon immediately draws the eye at full brightness. */
+.list-item img {
+    flex-shrink: 0;
+    opacity: 0.45;
+    transition: opacity 0.2s ease;
+}
+
+.list-item.active img {
+    opacity: 1;
+}
+
+.list-label {
+    font-size: 1.375em;  /* 22px at 16px base */
+    color: #b8ad94;      /* warm grey-gold for inactive items */
+    text-transform: uppercase;
+    letter-spacing: 0.0625em;  /* 1px at 16px base */
+    padding-left: 1.25em;      /* 20px at 16px base */
+    /* High-Contrast text protection */
+    text-shadow:
+        -1px -1px 0 #000, 1px -1px 0 #000,
+        -1px 1px 0 #000, 1px 1px 0 #000,
+        2px 2px 3px rgba(0,0,0,1);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.active .list-label {
+    color: #fff;
+}

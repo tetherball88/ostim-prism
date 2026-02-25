@@ -1,0 +1,133 @@
+.search-panel {
+    height: 50vh;
+    padding: 1.25em 1.5em;
+    border: 0.125em solid var(--panel-border-subtle);
+    border-left: 0.25em solid var(--amber);
+    background:
+        /* Subtle diagonal grain — barely perceptible at ~1% white,
+         * prevents the "pure CSS flat" look without adding visible art. */
+        repeating-linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px,
+            transparent 5px
+        ),
+        radial-gradient(circle at 10% 10%, rgba(200, 168, 75, 0.06), transparent 55%),
+        var(--panel-bg);
+    box-shadow: var(--panel-shadow);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.9em;
+}
+
+.search-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #f4e6c1;
+    padding-bottom: 0.55em;
+    /* Ornamental divider: amber at the left accent edge, fading right.
+     * Reads as the vertical accent casting a horizontal line of light. */
+    border-bottom: 1px solid;
+    border-image: linear-gradient(90deg, var(--amber) 0%, transparent 80%) 1;
+}
+
+.search-title {
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.search-count {
+    font-size: 0.85em;
+    color: #b6ab91;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.7em 0.8em;
+    background: rgba(10, 10, 14, 0.7);
+    border: 0.1em solid rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    font-size: 1em;
+    outline: none;
+    letter-spacing: 0.03em;
+}
+
+.search-input:focus {
+    border-color: #f1d28a;
+    box-shadow: 0 0 0 0.1em rgba(241, 210, 138, 0.25);
+}
+
+.search-results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    padding-right: 0.35em;
+}
+
+.search-results::-webkit-scrollbar {
+    width: 0.45em;
+}
+
+.search-results::-webkit-scrollbar-track {
+    background: rgba(10, 10, 14, 0.35);
+}
+
+.search-results::-webkit-scrollbar-thumb {
+    background: rgba(241, 210, 138, 0.5);
+    border-radius: 999px;
+}
+
+.search-empty {
+    color: #b3a98f;
+    font-size: 0.95em;
+    padding: 0.6em 0.2em;
+}
+
+.search-result {
+    padding: 0.6em 0.8em;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 0.2em solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.search-result:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.search-result.active {
+    border-color: #f1d28a;
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(0.2em);
+}
+
+.search-name {
+    font-size: 1.05em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0.1em 0.2em rgba(0, 0, 0, 0.6);
+}
+
+.search-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82em;
+    color: #c1b79f;
+    margin-top: 0.25em;
+}
+
+.search-scene {
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -1,0 +1,18 @@
+.prisma-tooltip {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+
+    padding: 4px 9px;
+    background: rgba(10, 8, 4, 0.92);
+    border-left: 2px solid #c8a84b;
+    color: #e8c96a;
+    font-family: 'OStimPrism', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}

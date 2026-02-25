@@ -46,7 +46,6 @@ void PrismaUIManager::SetTextInputFocus(bool focused) {
 
 RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_source) {
     if (!a_event || !*a_event) {
-        SKSE::log::warn("ProcessEvent called with null event");
         return RE::BSEventNotifyControl::kContinue;
     }
 
@@ -59,30 +58,24 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
     }
 
     // While a text input field is focused, suppress all hotkey handling
-    if (isTextInputFocused) {
-        SKSE::log::info("Input event received but text input is focused, ignoring hotkeys");
-        return RE::BSEventNotifyControl::kContinue;
-    }
+    // if (isTextInputFocused) {
+    //     return RE::BSEventNotifyControl::kContinue;
+    // }
 
     for (auto event = *a_event; event; event = event->next) {
         if (event->GetEventType() != RE::INPUT_EVENT_TYPE::kButton) {
-            SKSE::log::info("Received non-button input event, ignoring");
             continue;
         }
 
         auto button = event->AsButtonEvent();
         if (!button || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard) {
-            SKSE::log::info("Received non-keyboard button event, ignoring");
             continue;
         }
 
         // Toggle Focus (Configurable)
         auto key = button->GetIDCode();
         auto& focusKeys = Settings::GetSingleton()->toggleFocusKeys;
-        SKSE::log::info("Received key event: key={}", key);
-        SKSE::log::info("focusKeys={}", fmt::join(focusKeys, ","));
         if (std::find(focusKeys.begin(), focusKeys.end(), key) != focusKeys.end()) {
-            // IsDown() checks for initial press (Value > 0 && Duration == 0)
             if (button->IsDown()) {
                 if (prismaUI && view) {
                     if (prismaUI->HasFocus(view)) {
@@ -98,7 +91,6 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
 
         // Toggle Inspector (Configurable)
         auto& inspectorKeys = Settings::GetSingleton()->toggleInspectorKeys;
-        SKSE::log::info("inspectorKeys={}", fmt::join(inspectorKeys, ","));
         if (std::find(inspectorKeys.begin(), inspectorKeys.end(), key) != inspectorKeys.end()) {
             if (button->IsDown()) {
                 if (prismaUI && view) {

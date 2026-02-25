@@ -69,6 +69,8 @@ export const SearchMenu = () => {
       if (debounceRef.current !== null) {
         window.clearTimeout(debounceRef.current);
       }
+
+      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     };
   }, []);
 

@@ -35,6 +35,7 @@ export const AlignmentMenu = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("beforeinput", handleBeforeInput, { capture: true });
+      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     }
   }, [])
 

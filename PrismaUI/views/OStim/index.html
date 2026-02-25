@@ -8337,9 +8337,11 @@ const SearchMenu = () => {
   }, [focusBlock]);
   reactExports.useEffect(() => {
     return () => {
+      var _a;
       if (debounceRef.current !== null) {
         window.clearTimeout(debounceRef.current);
       }
+      (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     };
   }, []);
   reactExports.useEffect(() => {
@@ -8465,8 +8467,10 @@ const AlignmentMenu = () => {
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("beforeinput", handleBeforeInput, { capture: true });
     return () => {
+      var _a;
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("beforeinput", handleBeforeInput, { capture: true });
+      (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     };
   }, []);
   reactExports.useEffect(() => {

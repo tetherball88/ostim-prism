@@ -6,7 +6,7 @@ It is re-imagined interface for OStim, utilizing Prisma UI. While it follows OSt
 
 In Prisma UI cursor appears only in focused mode. While you in focused mode you delegate your controls from game to interface layer. Meaning game won't respond on your mouse move or any hotkeys.
 
-[](./docs/images/1.png | width=1920)
+![](docs/images/1.jpg)
 
 ## Hotkeys
 
@@ -28,7 +28,7 @@ You can change these 2 hotkeys in `OStimPrism.ini` file.
 
 The whole interface can be divided into 4 sections:
 
-[](./docs/images/sections.png | width=600)
+![](docs/images/sections.png)
 
 ### Main menu
 

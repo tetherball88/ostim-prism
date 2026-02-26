@@ -487,8 +487,6 @@ void PrismaUIManager::OnControlInput(OstimNG_API::Thread::Controls controlType, 
             return;
         }
 
-        SKSE::log::info("OnControlInput (Main Thread): control={}, threadID={}", static_cast<int>(controlType), threadID);
-
         // Only handle player thread (threadID == 0)
         if (threadID != 0) {
             return;
@@ -536,7 +534,6 @@ void PrismaUIManager::OnControlInput(OstimNG_API::Thread::Controls controlType, 
         }
 
         std::string script = "handleControl('" + std::string(controlStr) + "')";
-        SKSE::log::info("Sending control to PrismaUI: {}", script);
         manager->prismaUI->Invoke(manager->view, script.c_str());
     });
 }

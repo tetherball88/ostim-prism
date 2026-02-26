@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -24,6 +25,10 @@ namespace UIUtil {
     }
 
     inline std::string getIconBase64(const std::string& iconPath) {
+        static std::unordered_map<std::string, std::string> cache;
+        auto it = cache.find(iconPath);
+        if (it != cache.end()) return it->second;
+
         std::string fullPath = "Data\\Interface\\" + iconPath;
 
         // Replace forward slashes with backslashes for Windows
@@ -51,6 +56,6 @@ namespace UIUtil {
             return "";
         }
 
-        return base64Encode(buffer);
+        return cache[iconPath] = base64Encode(buffer);
     }
 }

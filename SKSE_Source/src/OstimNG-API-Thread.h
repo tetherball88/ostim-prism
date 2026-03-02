@@ -151,7 +151,6 @@ namespace OstimNG_API::Thread
         // buffer: array to fill with actor data
         // bufferSize: size of buffer array
         // Returns: number of actors filled (0 if invalid thread)
-        // Buffer is filled in ascending position order (position 0 -> buffer[0])
         virtual uint32_t GetActors(uint32_t threadID, ActorData* buffer, uint32_t bufferSize) noexcept = 0;
 
         // Get navigation option count for current node
@@ -268,8 +267,14 @@ namespace OstimNG_API::Thread
         virtual bool HasCompatibleNode(uint32_t threadID, const uint32_t* actorFormIDs, uint32_t actorCount) noexcept = 0;
 
         // Stop the old thread and start a new one with the given actor set, preserving all state.
-        // actorFormIDs: desired actors in desired order. Returns true if migration was initiated.
-        virtual bool MigrateThread(uint32_t threadID, const uint32_t* actorFormIDs, uint32_t actorCount) noexcept = 0;
+        // actorFormIDs: desired actors in desired order.
+        // - Without callback: blocks until migration completes; returns new thread ID or -1.
+        // - With callback: returns immediately (0 = scheduled, -1 = immediate failure);
+        //   callback is invoked with the new thread ID on success, or -1 on failure.
+        virtual int32_t MigrateThread(uint32_t threadID, const uint32_t* actorFormIDs, uint32_t actorCount,
+                                      void (*onComplete)(int32_t newThreadID, void* context) = nullptr,
+                                      void* context = nullptr,
+                                      int startDelayMs = 500) noexcept = 0;
 
         // MCM setting: if true, skip all condition checks (sex, actor requirements, etc.)
         virtual bool IsUnrestrictedNavigation() noexcept = 0;
@@ -297,4 +302,14 @@ namespace OstimNG_API::Thread
 
         return requestAPI(InterfaceVersion::V1, pluginName, pluginVersion);
     }
+    
+    // Internal helper for OStim code to notify events
+    // External mods should use RegisterEventCallback instead
+    void NotifyEvent(ThreadEvent eventType, uint32_t threadID);
+    
+    // Internal helper for OStim code to notify control input
+    // External mods should use RegisterControlCallback instead
+    void NotifyControlInput(Controls controlType, uint32_t threadID);
 }
+
+extern OstimNG_API::Thread::IThreadInterface* g_ostimThreadInterface;

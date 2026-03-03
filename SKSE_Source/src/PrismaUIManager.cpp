@@ -447,23 +447,41 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
         }
 
         switch (eventType) {
-            case OstimNG_API::Thread::ThreadEvent::ThreadStarted:
+            case OstimNG_API::Thread::ThreadEvent::ThreadStarted: {
                 SKSE::log::info("Thread started: {}", threadID);
                 manager->currentThreadID = threadID;
+                bool viewReused = manager->view != 0 && manager->prismaUI && manager->prismaUI->IsValid(manager->view);
                 manager->Show();
-                // StartPolling() is called inside Show()
+                if (viewReused) {
+                    // View survived from the previous thread (rapid restart case).
+                    // Show() just made it visible but didn't restart polling or refresh data.
+                    SKSE::log::info("Thread restarted with existing view — refreshing UI state");
+                    if (!manager->isPolling) manager->StartPolling();
+                    manager->UpdateNavigation();
+                    manager->UpdateExcitements();
+                    manager->UpdateOptions();
+                    manager->UpdateThreadStatus();
+                    manager->UpdateKeys();
+                }
                 break;
+            }
 
             case OstimNG_API::Thread::ThreadEvent::ThreadEnded:
                 SKSE::log::info("Thread ended: {}", threadID);
                 if (manager->currentThreadID == threadID) {
                     manager->StopPolling();
                     manager->currentThreadID = INVALID_THREAD_ID;
-                    // Destroy asynchronously to allow polling tasks to drain
+                    // Destroy asynchronously to allow polling tasks to drain.
+                    // Guard against rapid restart: if a new thread has already started
+                    // by the time this runs, skip the destroy so we don't kill the new view.
                     std::thread([manager]() {
                         std::this_thread::sleep_for(std::chrono::milliseconds(200));
                         SKSE::GetTaskInterface()->AddTask([manager]() {
-                            manager->Destroy();
+                            if (manager->currentThreadID == INVALID_THREAD_ID) {
+                                manager->Destroy();
+                            } else {
+                                SKSE::log::info("Skipping deferred Destroy: new thread started before destroy ran");
+                            }
                         });
                     }).detach();
                 }

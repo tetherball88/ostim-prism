@@ -5,6 +5,17 @@
 #include <Windows.h>
 #include <algorithm>
 
+namespace {
+    void SetCrosshairTarget(bool hasTarget) {
+        auto ui = RE::UI::GetSingleton();
+        if (!ui) return;
+        auto hudMenu = ui->GetMenu(RE::HUDMenu::MENU_NAME);
+        if (!hudMenu || !hudMenu->uiMovie) return;
+        RE::GFxValue args[6]{hasTarget, "", false, true, false, false};
+        hudMenu->uiMovie->Invoke("_root.HUDMovieBaseInstance.SetCrosshairTarget", nullptr, args, 6);
+    }
+}
+
 void PrismaUIManager::StartListeningInput() {
     if (isListeningInput) return;
     auto deviceManager = RE::BSInputDeviceManager::GetSingleton();
@@ -450,6 +461,7 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
             case OstimNG_API::Thread::ThreadEvent::ThreadStarted: {
                 SKSE::log::info("Thread started: {}", threadID);
                 manager->currentThreadID = threadID;
+                SetCrosshairTarget(false);
                 bool viewReused = manager->view != 0 && manager->prismaUI && manager->prismaUI->IsValid(manager->view);
                 manager->Show();
                 if (viewReused) {
@@ -469,6 +481,7 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
             case OstimNG_API::Thread::ThreadEvent::ThreadEnded:
                 SKSE::log::info("Thread ended: {}", threadID);
                 if (manager->currentThreadID == threadID) {
+                    SetCrosshairTarget(true);
                     manager->StopPolling();
                     manager->currentThreadID = INVALID_THREAD_ID;
                     // Destroy asynchronously to allow polling tasks to drain.

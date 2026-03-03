@@ -9,8 +9,8 @@ public:
     void Load();
 
     // Hotkeys
-    std::vector<uint32_t> toggleFocusKeys = { 29, 157 }; // Default: Left Ctrl, Right Ctrl
-    std::vector<uint32_t> toggleInspectorKeys = { 42 };  // Default: Left Shift
+    std::vector<uint32_t> toggleFocusKeys;
+    std::vector<uint32_t> toggleInspectorKeys;
 
 private:
     Settings() = default;

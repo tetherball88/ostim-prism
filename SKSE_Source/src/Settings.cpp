@@ -14,26 +14,15 @@ void Settings::Load() {
     std::filesystem::path iniPath = std::filesystem::current_path() / "Data/SKSE/Plugins/OStimPrism.ini";
 
     // Helper to read integer list
-    auto readIntList = [&](const char* section, const char* key, std::vector<uint32_t>& defaults) {
+    auto readIntList = [&](const char* section, const char* key, std::vector<uint32_t>& out) {
         char buffer[256];
         GetPrivateProfileStringA(section, key, "", buffer, sizeof(buffer), iniPath.string().c_str());
         std::string valStr = buffer;
-        
-        if (valStr.empty()) {
-            return; // Keep defaults
-        }
-
-        std::vector<uint32_t> keys;
+        if (valStr.empty()) return;
         std::stringstream ss(valStr);
         std::string item;
         while (std::getline(ss, item, ',')) {
-            try {
-                keys.push_back(std::stoi(item));
-            } catch (...) {}
-        }
-        
-        if (!keys.empty()) {
-            defaults = keys;
+            try { out.push_back(std::stoi(item)); } catch (...) {}
         }
     };
 

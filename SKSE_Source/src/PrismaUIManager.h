@@ -31,7 +31,6 @@ public:
     RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_source) override;
 
     static void OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, uint32_t threadID, void* userData);
-    static void OnControlInput(OstimNG_API::Thread::Controls controlType, uint32_t threadID, void* userData);
 
     static constexpr uint32_t INVALID_THREAD_ID = 0xFFFFFFFF;
 
@@ -44,6 +43,8 @@ private:
     bool isListeningInput = false;
     bool inspectorCreated = false;
     bool isTextInputFocused = false;
+    OStimDataProvider::KeyData cachedKeys{};
+    bool hasCachedKeys = false;
     
     void StartPolling();
     void StopPolling();

@@ -72,7 +72,8 @@ Is your main menu which will be shown by default. It is a list of available navi
 #### Controls
 
 - `up` - moves selected navigation option up
-- `down` - moves selected navigation option up
+- `down` - moves selected navigation option down
+- `hold up` / `hold down` - fast scroll through navigation options
 - `yes` - selects current navigation option and warps your animation to selected scene
 - `left` - changes focus from `Main Menu` to `Control buttons`
 
@@ -83,7 +84,8 @@ This menu looks similar to `Navigation` but its options are special commands whi
 #### Controls
 
 - `up` - moves selected option up
-- `down` - moves selected option dows
+- `down` - moves selected option down
+- `hold up` / `hold down` - fast scroll through options
 - `yes` - selects current option
 - `left` - changes focus from `Main Menu` to `Control buttons`
 
@@ -99,6 +101,7 @@ Unlike OStim vanilla Align menu you can type in inputs numbers so you don't need
 - `down` - moves down focused attribute you want to change
 - `left` - decreases by certain amount selected value
 - `right` - increases by certain amount selected value
+- `hold left` / `hold right` - rapidly decrease/increase selected value
 
 To exit this menu use `Esc` or `Tab` or click `Close` button.
 

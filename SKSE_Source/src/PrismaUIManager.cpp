@@ -117,6 +117,68 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
                 }
             }
         }
+        // All OStim key bindings are handled here in ProcessEvent.
+        if (hasCachedKeys && IsViewValid()) {
+
+            // Hardcoded keys not in OStim KeyData
+            constexpr uint32_t KEY_ESCAPE = 0x01;
+            constexpr uint32_t KEY_TAB    = 0x0F;
+            constexpr uint32_t KEY_TILDE  = 0x29;
+
+            // Directional/Yes keys: use handleControlStart/End for hold-to-repeat
+            const char* controlStr = nullptr;
+            if      (key == (uint32_t)cachedKeys.keyUp)     controlStr = "up";
+            else if (key == (uint32_t)cachedKeys.keyDown)   controlStr = "down";
+            else if (key == (uint32_t)cachedKeys.keyLeft)   controlStr = "left";
+            else if (key == (uint32_t)cachedKeys.keyRight)  controlStr = "right";
+            else if (key == (uint32_t)cachedKeys.keyYes)    controlStr = "yes";
+            else if (key == (uint32_t)cachedKeys.keyToggle) controlStr = "toggle";
+            else if (key == (uint32_t)cachedKeys.keyEnd)    controlStr = "no";
+            else if (key == (uint32_t)cachedKeys.keyHideUI) {
+                if (button->IsDown()) {
+                    if (prismaUI->IsHidden(view)) {
+                        SKSE::log::info("Showing UI");
+                        prismaUI->Show(view);
+                    } else {
+                        SKSE::log::info("Hiding UI");
+                        prismaUI->Hide(view);
+                    }
+                }
+            } else if (key == (uint32_t)cachedKeys.keySearch) {
+                if (button->IsDown()) {
+                    SKSE::log::info("Opening Search Menu");
+                    prismaUI->Invoke(view, "showMenu('searchMenu')");
+                }
+            } else if (key == (uint32_t)cachedKeys.keyAlignment) {
+                if (button->IsDown()) {
+                    SKSE::log::info("Opening Alignment Menu");
+                    prismaUI->Invoke(view, "showMenu('alignMenu')");
+                }
+            }
+            else if (key == KEY_ESCAPE) controlStr = "esc";
+            else if (key == KEY_TAB)    controlStr = "tab";
+            else if (key == KEY_TILDE)  {
+                if (button->IsDown()) {
+                    if (prismaUI->IsHidden(view)) {
+                        SKSE::log::info("Showing UI");
+                        prismaUI->Show(view);
+                    } else {
+                        SKSE::log::info("Hiding UI");
+                        prismaUI->Hide(view);
+                    }
+                }
+                controlStr = "tilde";
+            }
+
+            if (controlStr) {
+                if (button->IsDown()) {
+                    std::string script = "handleControlStart('" + std::string(controlStr) + "')";
+                    prismaUI->Invoke(view, script.c_str());
+                } else if (button->IsUp()) {
+                    prismaUI->Invoke(view, "handleControlEnd()");
+                }
+            }
+        }
     }
 
     return RE::BSEventNotifyControl::kContinue;
@@ -282,6 +344,8 @@ void PrismaUIManager::UpdateKeys()
     if (!dataProvider->IsConnected()) return;
 
     auto keys = dataProvider->GetKeyData();
+    cachedKeys = keys;
+    hasCachedKeys = true;
 
     json j = {        
         {"keyUp", keys.keyUp},
@@ -508,64 +572,6 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
                 }
                 break;
         }
-    });
-}
-
-void PrismaUIManager::OnControlInput(OstimNG_API::Thread::Controls controlType, uint32_t threadID, void* /*userData*/) {
-    SKSE::GetTaskInterface()->AddTask([controlType, threadID]() {
-        auto manager = GetSingleton();
-        if (!manager || !manager->prismaUI || !manager->view) {
-            return;
-        }
-
-        // Only handle player thread (threadID == 0)
-        if (threadID != 0) {
-            return;
-        }
-
-        if (manager->currentThreadID != threadID) {
-            return;
-        }
-
-        // Convert Controls to string for JS
-        const char* controlStr = nullptr;
-        switch (controlType) {
-            case OstimNG_API::Thread::Controls::Up: controlStr = "up"; break;
-            case OstimNG_API::Thread::Controls::Down: controlStr = "down"; break;
-            case OstimNG_API::Thread::Controls::Left: controlStr = "left"; break;
-            case OstimNG_API::Thread::Controls::Right: controlStr = "right"; break;
-            case OstimNG_API::Thread::Controls::Toggle: controlStr = "toggle"; break;
-            case OstimNG_API::Thread::Controls::Yes: controlStr = "yes"; break;
-            case OstimNG_API::Thread::Controls::No: controlStr = "no"; break;
-            case OstimNG_API::Thread::Controls::Menu: controlStr = "menu"; break;
-            case OstimNG_API::Thread::Controls::KEY_HIDE: {
-                SKSE::log::info("Toggle UI visibility");
-                if(manager->prismaUI->IsHidden(manager->view)) {
-                    SKSE::log::info("Showing UI");
-                    manager->prismaUI->Show(manager->view);
-                } else {
-                    SKSE::log::info("Hiding UI");
-                    manager->prismaUI->Hide(manager->view);
-                }
-                return;
-            }
-            case OstimNG_API::Thread::Controls::AlignMenu: {
-                SKSE::log::info("Opening Alignment Menu");
-                std::string script = "showMenu('alignMenu')";
-                manager->prismaUI->Invoke(manager->view, script.c_str());
-                return;
-            }
-            case OstimNG_API::Thread::Controls::SearchMenu: {
-                SKSE::log::info("Opening Search Menu");
-                std::string searchScript = "showMenu('searchMenu')";
-                manager->prismaUI->Invoke(manager->view, searchScript.c_str());
-                return;
-            }
-            default: return;
-        }
-
-        std::string script = "handleControl('" + std::string(controlStr) + "')";
-        manager->prismaUI->Invoke(manager->view, script.c_str());
     });
 }
 

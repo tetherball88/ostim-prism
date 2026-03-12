@@ -1,0 +1,101 @@
+/* ============================================================
+ * Design Tokens
+ * All layout positions and colors are defined here so that
+ * the entire HUD can be repositioned or recolored in one place.
+ * ============================================================ */
+:root {
+    /* --- Type scale ---
+     * Single definition shared by all panels.
+     * All font sizes across the HUD derive from this one value, so changing
+     * it scales the entire UI text up or down at once.
+     *
+     * The formula  max(min(0.85vw, 30px), 15px)  means:
+     *   - At a 1920px-wide display  →  ~16px  (0.85 × 1920 = 16.3px, capped to 30px)
+     *   - At a 2560px-wide display  →  ~22px
+     *   - The value is always at least 15px (floor) and at most 30px (ceiling).
+     *
+     * To make the HUD text LARGER: raise the multiplier or the ceiling cap.
+     *   e.g.  max(min(1.1vw, 36px), 18px)   — bigger on all screens
+     *
+     * To make the HUD text SMALLER: lower the multiplier or the floor cap.
+     *   e.g.  max(min(0.7vw, 26px), 13px)   — smaller on all screens
+     *
+     * To use a fixed size regardless of resolution:
+     *   --text-scale: 16px;
+     */
+    --text-scale: max(min(0.85vw, 30px), 15px);
+
+    /* --- Layout anchors ---
+     * Adjust these to move the entire HUD as a unit.
+     * All components reference these rather than hardcoding positions.
+     *
+     * --control-buttons-size  Width/height of the circular action buttons.
+     *                         Increase to make buttons bigger; left panel shifts right automatically
+     *                         because --hud-left-edge references this value.
+     *
+     * --hud-bottom            Distance from the bottom of the screen to the HUD baseline.
+     *                         Increase (e.g. 18rem) to push everything higher on screen.
+     *                         Decrease (e.g. 10rem) to push everything closer to the bottom edge.
+     *
+     * --hud-left-edge         Left edge of the navigation panel.
+     *                         The formula keeps a 1vw margin + room for the control buttons + 60px gap.
+     *                         Increase the 60px offset to add more breathing room between buttons and panel.
+     *
+     * --hud-right-edge        Right edge offset for the search and alignment panels.
+     *                         Increase to move those panels further from the right edge of the screen.
+     *
+     * --hud-progress-left     Horizontal position of the progress rings.
+     *                         Default ~307px at 1920px wide. Raise (e.g. 20vw) to shift rings right.
+     */
+    --control-buttons-size: 4rem;
+    --hud-bottom: 14rem;          /* vertical anchor for panels & controls */
+    --hud-left-edge: calc(1vw + var(--control-buttons-size) + 60px);       /* left panel / nav list left edge        */
+    --hud-right-edge: 120px;      /* right panels (search / alignment)      */
+    --hud-progress-left: 16vw;    /* progress rings — ~307px at 1920px      */
+
+    /* --- Amber-gold accent palette ---
+     * Warm iron-lantern tone that reads as "ancient magic" without being
+     * garish. Used for all interactive chrome: borders, active states,
+     * focus rings, scrollbar thumbs, selector highlights.
+     *
+     * To change the overall accent color (e.g. to silver/blue for a Dwemer theme),
+     * replace the base RGB values (200, 168, 75) consistently across all five tokens.
+     * Use https://www.color-hex.com/ to find the RGB equivalent of your chosen hex color.
+     *
+     * --amber        Solid accent. Appears on button borders and active text.
+     * --amber-light  Brighter version. Used on hover and keyboard-focus states.
+     * --amber-dim    35% opacity. Decorative dividers and inactive borders.
+     * --amber-glow   10% opacity. Subtle background tint on active/selected items.
+     * --amber-border 18% opacity. Outer panel borders — keep subtle to avoid visual noise.
+     */
+    --amber:        #c8a84b;                       /* main accent           */
+    --amber-light:  #e8c96a;                       /* hover / focus         */
+    --amber-dim:    rgba(200, 168, 75, 0.35);      /* decorative borders    */
+    --amber-glow:   rgba(200, 168, 75, 0.10);      /* active bg tint        */
+    --amber-border: rgba(200, 168, 75, 0.18);      /* panel outer border    */
+
+    /* --- Panel surfaces ---
+     * Warm near-black with a hint of brown (not pure #000 / #161616).
+     * Reads as dark stone / aged iron rather than generic dark-mode.
+     *
+     * --panel-bg            The gradient fill behind every panel.
+     *                       The two rgba() stops can be edited independently:
+     *                       - First stop  (140deg origin): slightly lighter corner.
+     *                       - Second stop (destination):   deepest shadow corner.
+     *                       Raise the alpha (0.5 → 0.8) for a more opaque, less transparent panel.
+     *                       Lower it (0.5 → 0.2) to make panels feel more like an overlay.
+     *
+     * --panel-border-subtle Hairline border drawn around each panel.
+     *                       Derived from the amber palette at very low opacity (0.15).
+     *                       Raise opacity to make panel edges more visible.
+     *
+     * --panel-shadow        Drop-shadow depth. The third value (2.5em) is the blur radius —
+     *                       increase it for a softer, more diffuse shadow.
+     *                       The rgba alpha (0.60) controls shadow darkness.
+     */
+    --panel-bg:             linear-gradient(140deg, rgba(16, 14, 8, 0.5), rgba(8, 7, 4, 0.5));
+    --panel-border-subtle:  rgba(200, 168, 75, 0.15);
+    --panel-shadow:         0 1.25em 2.5em rgba(0, 0, 0, 0.60);
+
+    
+}

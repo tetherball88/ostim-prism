@@ -11,10 +11,11 @@ export const useControls = () => {
           if (e.code === 'Numpad5' || e.code === 'ArrowDown') { e.preventDefault(); window.handleControl('down'); }
           if (e.code === 'Numpad4' || e.code === 'ArrowLeft') { e.preventDefault(); window.handleControl('left'); }
           if (e.code === 'Numpad6' || e.code === 'ArrowRight') { e.preventDefault(); window.handleControl('right'); }
-          if (e.code === 'Numpad7' || e.code === 'Enter') { e.preventDefault(); window.handleControl('yes'); }      
+          if (e.code === 'Numpad7' || e.code === 'Enter') { e.preventDefault(); window.handleControl('yes'); }   
+          if (e.keyCode === 27) { e.preventDefault(); window.handleControl('esc'); }
+          if (e.keyCode === 9) { e.preventDefault(); window.handleControl('tab'); }   
       }
-      if (e.keyCode === 27) { e.preventDefault(); window.handleControl('esc'); }
-      if (e.keyCode === 9) { e.preventDefault(); window.handleControl('tab'); }
+      
     };
 
     const handleWheel = (e: WheelEvent) => {

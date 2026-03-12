@@ -48,7 +48,12 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 const activeFieldIdx = state.alignment.activeField;
                 const isCloseButton = activeFieldIdx >= alignmentFields.length;
 
-                if (lowerCaseControl === 'up') state.moveAlignmentField(-1);
+                if (lowerCaseControl === 'toggle') {
+                    const count = state.alignment.actorCount > 0 ? state.alignment.actorCount : 1;
+                    const actorFieldIdx = alignmentFields.findIndex(f => f.key === 'actor');
+                    const nextActor = (state.alignment.actorIndex + 1) % count;
+                    state.updateAlignmentField({ index: actorFieldIdx, value: nextActor + 1, type: "actorIndex" });
+                } else if (lowerCaseControl === 'up') state.moveAlignmentField(-1);
                 else if (lowerCaseControl === 'down') state.moveAlignmentField(1);
                 else if (isCloseButton) {
                     if (lowerCaseControl === 'yes' || lowerCaseControl === 'enter') {

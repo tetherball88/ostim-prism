@@ -18,26 +18,30 @@ export const AlignmentMenu = () => {
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const inputValues = alignment.inputValues;
-
+  
   useEffect(() => {
     let lastKey: null | number = null;
+
     const handleKeyDown = (event: KeyboardEvent) => {
       lastKey = event.keyCode;
     }
-    const numKeys: number[] = [keys.keyDown, keys.keyUp, keys.keyLeft, keys.keyRight, keys.keyYes];
+
+    const numKeys: number[] = Object.values(keys).map(k => k);
     const handleBeforeInput = (event: InputEvent) => {
       if (lastKey !== null && numKeys.some(k => k === lastKey)) {
         event.preventDefault();
       }
     }
     window.addEventListener("keydown", handleKeyDown, { capture: true });
+    // window.addEventListener("keyup", handleKeyUp, { capture: true });
     window.addEventListener("beforeinput", handleBeforeInput, { capture: true });
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      // window.removeEventListener("keyup", handleKeyUp, { capture: true });
       window.removeEventListener("beforeinput", handleBeforeInput, { capture: true });
       window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     }
-  }, [])
+  }, [keys])
 
   useEffect(() => {
     if (isInGame()) {

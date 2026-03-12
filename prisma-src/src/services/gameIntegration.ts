@@ -77,6 +77,23 @@ export function setupGameIntegration(store: StoreState) {
         store.handleControlInput(control);
     };
 
+    let repeatTimer: ReturnType<typeof setTimeout> | null = null;
+    let repeatInterval: ReturnType<typeof setInterval> | null = null;
+
+    window.handleControlStart = (control: string) => {
+        if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
+        if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+        store.handleControlInput(control);
+        repeatTimer = setTimeout(() => {
+            repeatInterval = setInterval(() => store.handleControlInput(control), 50);
+        }, 400);
+    };
+
+    window.handleControlEnd = () => {
+        if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
+        if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+    };
+
     window.setGameReady = () => {
         console.log("Game signaled it's ready");
         store.setGameReady();

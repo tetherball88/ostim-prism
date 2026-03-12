@@ -95,7 +95,6 @@ SKSEPluginLoad(const LoadInterface* skse) {
                         auto threadAPI = OstimNG_API::Thread::GetAPI("OStim Prism", REL::Version(1, 0, 0));
                         if (threadAPI) {
                             threadAPI->RegisterEventCallback(PrismaUIManager::OnThreadEvent, nullptr);
-                            threadAPI->RegisterControlCallback(PrismaUIManager::OnControlInput, nullptr);
                             
                             // Only disable OStim's Flash UI if PrismaUI is actually available
                             if (PrismaUIManager::GetSingleton()->IsAvailable()) {

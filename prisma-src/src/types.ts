@@ -97,6 +97,9 @@ declare global {
         updateThreadStatus(status: ThreadStatus | string): void;
         /** Called by Skyrim to send a control input (up/down/left/yes). */
         handleControl(control: string): void;
+        handleControlStart(control: string): void;
+        handleControlEnd(): void;
+
         /** Injected by Skyrim/CEF – sends a JSON action string back to the game. */
         sendAction?: (data: string) => void;
         showMenu(menu: ActiveMenu): void;

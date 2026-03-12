@@ -1,0 +1,758 @@
+.prisma-tooltip {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+
+    padding: 4px 9px;
+    background: rgba(10, 8, 4, 0.92);
+    border-left: 2px solid #c8a84b;
+    color: #e8c96a;
+    font-family: 'OStimPrism', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+.circular-progress {
+    --pb-size: 8rem;
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;   /* SVG on top, name below */
+    align-items: center;
+    overflow: visible;
+
+    /* Dark radial vignette so arcs read against any game background.
+     * Center is offset toward the top (45%) because the horseshoe gap
+     * is at the bottom — the dark mass should follow the arc mass. */
+    background: radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.48) 25%, transparent 68%);
+}
+
+.circular-progress .progress-bg {
+    fill: none;
+}
+
+.circular-progress .progress-fill {
+    fill: none;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+/* At ≥75% excitement the arc glows with the actor's gender color.
+ * filter: drop-shadow pulses the arc itself rather than fading the whole
+ * element — the stroke swells with light rather than blinking. */
+.circular-progress.high-progress .progress-fill {
+    /* -webkit-animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite;
+    animation: glow-pulse var(--pulse-duration, 1.5s) ease-in-out infinite; */
+    /* filter: drop-shadow(0 0 4px #00ffff); */
+    animation: glow-pulse var(--pulse-duration, 1.5s) infinite ease-in-out;
+}
+
+@keyframes glow-pulse {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+}
+
+/* @-webkit-keyframes glow-pulse {
+    0%, 100% {
+        -webkit-filter: drop-shadow(0 0 2px var(--glow-color));
+        filter: drop-shadow(0 0 2px var(--glow-color));
+    }
+    50% {
+        -webkit-filter: drop-shadow(0 0 10px var(--glow-color));
+        filter: drop-shadow(0 0 10px var(--glow-color));
+    }
+}
+
+@keyframes glow-pulse {
+    0%, 100% { filter: drop-shadow(0 0 2px var(--glow-color)); }
+    50%       { filter: drop-shadow(0 0 10px var(--glow-color)); }
+} */
+
+/* Percentage number inside the ring. fill color is set inline (gender color)
+ * so the number is visually tied to its arc without needing to parse arc length. */
+.circular-progress .progress-percentage {
+    font-family: 'OStimPrism', sans-serif;
+    /* font-size is set as an SVG user-unit attribute (fontSize prop) so it
+     * scales correctly with the viewBox — rem here would not respect scaling. */
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    /* Four-direction outline for readability over any background */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9))
+            drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.9))
+            drop-shadow(1px 0 2px rgba(0, 0, 0, 0.9))
+            drop-shadow(-1px 0 2px rgba(0, 0, 0, 0.9));
+}
+
+/* Label sits below the ring in normal flow.
+ * margin-top clears the outer arcs which overflow their SVG box by ~3px. */
+.circular-progress .progress-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    /* High-Contrast text protection */
+    text-shadow:
+        -1px -1px 0 #000, 1px -1px 0 #000,
+        -1px 1px 0 #000,  1px 1px 0 #000,
+        2px 2px 3px rgba(0, 0, 0, 1);
+}
+
+/* Name has the full SVG width now that it's outside the ring —
+ * longer character names survive without truncating. */
+.circular-progress .progress-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #b8ad94;
+    max-width: 8.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+.thread-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Speed number inside the ring — same treatment as progress-percentage. */
+.thread-speed-value {
+    font-family: 'OStimPrism', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    filter:
+        drop-shadow(0  1px 2px rgba(0, 0, 0, 0.9))
+        drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.9))
+        drop-shadow( 1px 0  2px rgba(0, 0, 0, 0.9))
+        drop-shadow(-1px 0  2px rgba(0, 0, 0, 0.9));
+}
+
+/* Speed range label below the ring — matches progress-name style. */
+.thread-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 6px;
+    text-transform: uppercase;
+    text-shadow:
+        -1px -1px 0 #000, 1px -1px 0 #000,
+        -1px  1px 0 #000, 1px  1px 0 #000,
+        2px 2px 3px rgba(0, 0, 0, 1);
+}
+
+.thread-speed-range {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #b8ad94;
+    letter-spacing: 0.08em;
+}
+.progress-bar-container {
+    position: absolute;
+    bottom: 20px;
+    left: 1vw; /* ~16vw ≈ 307px at 1920px; scales with resolution */
+    display: flex;
+    gap: 40px;
+    max-width: 30%;
+}@property --top-mask-threshold {
+    syntax: '<percentage>';
+    inherits: true;
+    initial-value: 20%;
+}
+@property --bottom-mask-threshold {
+    syntax: '<percentage>';
+    inherits: true;
+    initial-value: 80%;
+}
+/*
+ * List Scale System
+ * Uses viewport-relative units for resolution independence:
+ *   - 0.85vw ≈ 16px at 1080p, 22px at 1440p, 32px at 4K
+ *   - Slightly larger caps than panels (32/16) to compensate for
+ *     the open-layout rendering (no enclosing panel padding).
+ */
+.list {
+    max-height: 50vh;
+    overflow: hidden;
+    transition: --top-mask-threshold 0.25s ease, --bottom-mask-threshold 0.25s ease;
+
+    /* Dark warm stone surface — fades horizontally so the right edge
+     * dissolves into the game world rather than cutting off abruptly. */
+    background: linear-gradient(
+        90deg,
+        rgba(14, 12, 8, 0.72) 0%,
+        rgba(14, 12, 8, 0.40) 65%,
+        transparent 100%
+    );
+
+    /* 20% fade zones make the "scroll beyond" signal unambiguous. */
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        black var(--top-mask-threshold),
+        black var(--bottom-mask-threshold),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        black var(--top-mask-threshold),
+        black var(--bottom-mask-threshold),
+        transparent 100%
+    );
+}
+
+.list.bottom {
+    --bottom-mask-threshold: 100%;
+}
+
+.list.top {
+    --top-mask-threshold: 0%;
+}
+
+/* Item count — sits above the list window, outside the overflow/mask.
+ * Uses the same font-size formula and positioning anchor as the nav list
+ * so it aligns correctly at every resolution. */
+.list-count {
+    position: absolute;
+    left: 0;
+    top: -2.2em;
+    font-size: 1.5em;
+    color: var(--amber);
+    opacity: 0.70;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.9), -1px -1px 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    /* Ornamental cap — amber line that visually closes the top of the nav area. */
+    padding-bottom: 0.45em;
+    border-bottom: 1px solid;
+    border-image: linear-gradient(90deg, var(--amber) 0%, transparent 75%) 1;
+}
+
+.list-container {
+    position: relative;
+    z-index: 1;
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0.3, 1);
+}
+
+/* Smooth sliding selector — amber accent with an inset torch-light glow. */
+.list-selector {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 4em;         /* 64px at 16px base */
+    background: linear-gradient(
+        90deg,
+        rgba(200, 168, 75, 0.18) 0%,
+        rgba(0, 0, 0, 0.35) 45%,
+        transparent 100%
+    );
+    border-left: 0.25em solid var(--amber);  /* 4px at 16px base */
+    box-shadow: inset 4px 0 14px rgba(200, 168, 75, 0.25);
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0.3, 1);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.list-item {
+    position: relative;
+    z-index: 1;
+    height: 4em;         /* 64px at 16px base */
+    padding: 0 1.875em 0 0;  /* 0 30px 0 0 at 16px base */
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: padding-left 0.2s ease;
+    box-sizing: border-box;
+}
+
+.list-item.active {
+    padding-left: 2.8125em;  /* 45px at 16px base */
+}
+
+/* Icon — prevent squishing if labels are long; dim inactive items so
+ * the active icon immediately draws the eye at full brightness. */
+.list-item img {
+    flex-shrink: 0;
+    opacity: 0.45;
+    transition: opacity 0.2s ease;
+}
+
+.list-item.active img {
+    opacity: 1;
+}
+
+.list-label {
+    font-size: 1.375em;  /* 22px at 16px base */
+    color: #b8ad94;      /* warm grey-gold for inactive items */
+    text-transform: uppercase;
+    letter-spacing: 0.0625em;  /* 1px at 16px base */
+    padding-left: 1.25em;      /* 20px at 16px base */
+    /* High-Contrast text protection */
+    text-shadow:
+        -1px -1px 0 #000, 1px -1px 0 #000,
+        -1px 1px 0 #000, 1px 1px 0 #000,
+        2px 2px 3px rgba(0,0,0,1);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.active .list-label {
+    color: #fff;
+}
+.search-panel {
+    height: 50vh;
+    padding: 1.25em 1.5em;
+    border: 0.125em solid var(--panel-border-subtle);
+    border-left: 0.25em solid var(--amber);
+    background:
+        /* Subtle diagonal grain — barely perceptible at ~1% white,
+         * prevents the "pure CSS flat" look without adding visible art. */
+        repeating-linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px,
+            transparent 5px
+        ),
+        radial-gradient(circle at 10% 10%, rgba(200, 168, 75, 0.06), transparent 55%),
+        var(--panel-bg);
+    box-shadow: var(--panel-shadow);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.9em;
+}
+
+.search-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #f4e6c1;
+    padding-bottom: 0.55em;
+    /* Ornamental divider: amber at the left accent edge, fading right.
+     * Reads as the vertical accent casting a horizontal line of light. */
+    border-bottom: 1px solid;
+    border-image: linear-gradient(90deg, var(--amber) 0%, transparent 80%) 1;
+}
+
+.search-title {
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.search-count {
+    font-size: 0.85em;
+    color: #b6ab91;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.7em 0.8em;
+    background: rgba(10, 10, 14, 0.7);
+    border: 0.1em solid rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    font-size: 1em;
+    outline: none;
+    letter-spacing: 0.03em;
+}
+
+.search-input:focus {
+    border-color: #f1d28a;
+    box-shadow: 0 0 0 0.1em rgba(241, 210, 138, 0.25);
+}
+
+.search-results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    padding-right: 0.35em;
+}
+
+.search-results::-webkit-scrollbar {
+    width: 0.45em;
+}
+
+.search-results::-webkit-scrollbar-track {
+    background: rgba(10, 10, 14, 0.35);
+}
+
+.search-results::-webkit-scrollbar-thumb {
+    background: rgba(241, 210, 138, 0.5);
+    border-radius: 999px;
+}
+
+.search-empty {
+    color: #b3a98f;
+    font-size: 0.95em;
+    padding: 0.6em 0.2em;
+}
+
+.search-result {
+    padding: 0.6em 0.8em;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 0.2em solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.search-result:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.search-result.active {
+    border-color: #f1d28a;
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(0.2em);
+}
+
+.search-name {
+    font-size: 1.05em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0.1em 0.2em rgba(0, 0, 0, 0.6);
+}
+
+.search-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82em;
+    color: #c1b79f;
+    margin-top: 0.25em;
+}
+
+.search-scene {
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.align-panel {
+    padding: 1.25em 1.5em;
+    border: 0.125em solid var(--panel-border-subtle);
+    border-left: 0.25em solid var(--amber);
+    background:
+        repeating-linear-gradient(
+            45deg,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px,
+            transparent 5px
+        ),
+        radial-gradient(circle at 10% 10%, rgba(200, 168, 75, 0.08), transparent 55%),
+        var(--panel-bg);
+    box-shadow: var(--panel-shadow);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.9em;
+}
+
+.align-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #f4e6c1;     /* warm cream — matches search header */
+    /* Ornamental divider matching the search panel treatment. */
+    border-bottom: 1px solid;
+    border-image: linear-gradient(90deg, var(--amber) 0%, transparent 80%) 1;
+    padding-bottom: 0.5em;
+}
+
+.align-title {
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.align-info-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    width: 100%;
+}
+
+.align-info-row {
+    font-size: 0.75em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    align-items: baseline;
+    color: #b6a880;     /* warm tan instead of cool grey-blue */
+}
+
+.align-info-label {
+    color: #7a6830;     /* muted amber-brown */
+    font-weight: 600;
+    min-width: 3.5em;
+}
+
+.align-info-value {
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.align-info-sub {
+    font-size: 0.9em;
+    opacity: 0.7;
+}
+
+.align-info-index {
+    color: #a08840;     /* amber-toned counter */
+    margin-left: auto;
+}
+
+.align-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.align-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55em 0.75em;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 0.2em solid transparent;
+    letter-spacing: 0.04em;
+}
+
+.align-input {
+    width: 6.5em;
+    text-align: right;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 0.95em;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+}
+
+.align-input:focus {
+    outline: none;
+}
+
+.align-field.active {
+    border-color: var(--amber);
+    background: var(--amber-glow);
+}
+
+.align-label {
+    text-transform: uppercase;
+    font-size: 0.92em;
+    color: #d4c89a;     /* warm parchment */
+}
+
+.align-value {
+    font-size: 0.95em;
+    color: #ffffff;
+    text-shadow: 0 0.1em 0.2em rgba(0, 0, 0, 0.6);
+}
+
+.align-hint {
+    font-size: 0.78em;
+    color: #9a8a5a;     /* muted amber for hints */
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.align-close-button {
+    padding: 0.8em;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--amber-border);
+    color: #f4e6c1;
+    cursor: pointer;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition: all 0.2s ease;
+    margin-top: 0.5em;
+    width: 100%;
+}
+
+.align-close-button:hover,
+.align-close-button.active {
+    background: var(--amber-glow);
+    border-color: var(--amber);
+    color: #fff;
+    box-shadow: 0 0 10px var(--amber-dim);
+}
+.control-buttons {
+    position: relative;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    padding: 0.5em 0.4em;
+
+    /* Subtle grounding surface — fades upward so the strip reads as
+     * part of the bottom HUD rather than a floating element. */
+    background: linear-gradient(180deg, transparent 0%, rgba(14, 12, 8, 0.50) 100%);
+    border-left: 2px solid var(--amber-dim);
+}
+
+/* Animated indicator — slides between buttons on hover / active change. */
+.control-button-indicator {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    border: 2px solid var(--amber);
+    background: var(--amber-glow);
+    box-shadow: 0 0 8px var(--amber-dim);
+    transition: top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease, opacity 0.15s ease;
+    box-sizing: border-box;
+}
+
+/* Each button is a column: icon on top, short label below. */
+.control-button {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+    padding: 0.2em;
+    width: calc(var(--control-buttons-size) + 8px); 
+    box-sizing: border-box;
+}
+
+.control-button img {
+    display: block;
+    opacity: 0.55;
+    transition: opacity 0.15s ease;
+}
+
+.control-button-label {
+    display: block;
+    font-size: 0.9em;
+    color: rgba(184, 173, 148, 0.65);   /* muted warm grey — secondary to the icon */
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    text-align: center;
+    line-height: 1.25;
+    min-width: var(--control-buttons-size);    /* wraps 'Utility Options' to two short lines */
+    width: var(--control-buttons-size);
+    box-sizing: border-box;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.9);
+    transition: color 0.15s ease;
+}
+
+/* The indicator handles the border/background — just brighten icon and label. */
+.focus-buttons .control-button.active img {
+    opacity: 1;
+}
+
+.control-button.active .control-button-label {
+    color: var(--amber);
+}
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('../assets/font/OStimPrism-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('../assets/font/OStimPrism-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('../assets/font/OStimPrism-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'OStimPrism';
+  src: url('../assets/font/OStimPrism-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    font-family: 'OStimPrism', sans-serif;
+}
+
+html {
+    font-size: var(--text-scale);
+}
+
+body {
+    background: transparent;
+    color: #ffffff;
+}
+
+/* Bottom anchor — horizontal rule at the panel base level so all left and
+ * right components appear to sit on a shared ground line.
+ * Positioned at --hud-bottom (same as the panels), not at screen bottom. */
+body::after {
+    content: '';
+    position: fixed;
+    bottom: var(--hud-bottom);
+    left: calc(1vw + 2px);
+    width: calc(30em);
+    height: 2px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(200, 168, 75, 0.55) 0%,
+        rgba(200, 168, 75, 0.55) 75%,
+        transparent 100%
+    );
+    box-shadow: 0 0 8px rgba(200, 168, 75, 0.30);
+    pointer-events: none;
+    z-index: 9999;
+}
+
+.ui-container {
+    width: 100vw;
+    height: 100vh;
+    background-size: cover;
+    background-position: center;
+}
+
+.buttons-section {
+    position: absolute;
+    bottom: var(--hud-bottom);
+    left: 1vw;           /* viewport-relative so it scales consistently */
+}
+
+.menu-section {
+    position: fixed;
+    left: var(--hud-left-edge);
+    bottom: var(--hud-bottom);
+    width: 30em;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.focus-buttons .menu-section {
+    filter: blur(2px);
+    opacity: 0.6;
+    pointer-events: none;
+}

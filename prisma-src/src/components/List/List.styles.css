@@ -16,7 +16,6 @@
  *     the open-layout rendering (no enclosing panel padding).
  */
 .list {
-    font-size: max(min(0.85vw, 32px), 16px); /* BASE SCALE - scales with screen resolution */
     max-height: 50vh;
     overflow: hidden;
     transition: --top-mask-threshold 0.25s ease, --bottom-mask-threshold 0.25s ease;

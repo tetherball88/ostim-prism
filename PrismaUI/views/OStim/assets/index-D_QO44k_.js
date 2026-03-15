@@ -7452,7 +7452,7 @@
       if (typeof value === "number" && !isNaN(value)) {
         (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({
           action: fieldConfig.key === "actor" ? "alignmentSelectActor" : "alignmentSet",
-          payload: fieldConfig.key === "actor" ? { actorIndex: newAlignmentPayload.actorIndex } : { actorIndex: newAlignmentPayload.actorIndex, field: fieldConfig.key, value: clampedValue }
+          payload: fieldConfig.key === "actor" ? { actorIndex: newAlignmentPayload.actorIndex } : { actorIndex: newAlignmentPayload.actorIndex, ...newAlignmentPayload.data }
         }));
       }
       console.log("Updated alignment field in state", {
@@ -7499,7 +7499,6 @@
           payload: { shouldFocus: true }
         }));
       }
-      console.log(`Focus block after menu update: ${state.focusBlock}`);
       return {
         activeMenu: menu,
         focusBlock: "menu",
@@ -8624,6 +8623,7 @@
     const activeMenu = useOStimStore((state) => state.activeMenu);
     const focusBlock = useOStimStore((state) => state.focusBlock);
     reactExports.useEffect(() => {
+      console.log("INIT:", true);
       updateActiveMenu("navigation");
     }, []);
     useControls();
@@ -8853,8 +8853,16 @@
       store2.updateThreadStatus(parsed);
     };
     window.showMenu = (menu) => {
-      console.log("showMenu called with:", menu);
-      store2.updateActiveMenu(menu);
+      const recentStore = useOStimStore.getState();
+      const currentMenu = recentStore.activeMenu;
+      console.log("showMenu called with:", menu, currentMenu);
+      if (currentMenu == menu) {
+        console.log("Toggling menu to navigation, current activeMenu:", currentMenu);
+        store2.updateActiveMenu("navigation");
+      } else {
+        console.log("Switching menu, current activeMenu:", currentMenu);
+        store2.updateActiveMenu(menu);
+      }
     };
     window.handleControl = (control) => {
       store2.handleControlInput(control);
@@ -8862,18 +8870,35 @@
     let repeatTimer = null;
     let repeatInterval = null;
     window.handleControlStart = (control) => {
-      if (repeatTimer) {
-        clearTimeout(repeatTimer);
-        repeatTimer = null;
+      const recentStore = useOStimStore.getState();
+      const lowerCaseControl = control.toLowerCase();
+      let shouldListenToHold = false;
+      if (recentStore.focusBlock === "buttons") {
+        shouldListenToHold = lowerCaseControl === "up" || lowerCaseControl === "down";
+      } else if (recentStore.focusBlock === "menu") {
+        if (recentStore.activeMenu === "alignMenu") {
+          shouldListenToHold = lowerCaseControl === "left" || lowerCaseControl === "right";
+        }
+        if (recentStore.activeMenu === "searchMenu" || recentStore.activeMenu === "navigation" || recentStore.activeMenu === "utilityOptions") {
+          shouldListenToHold = lowerCaseControl === "up" || lowerCaseControl === "down";
+        }
       }
-      if (repeatInterval) {
-        clearInterval(repeatInterval);
-        repeatInterval = null;
+      if (shouldListenToHold) {
+        if (repeatTimer) {
+          clearTimeout(repeatTimer);
+          repeatTimer = null;
+        }
+        if (repeatInterval) {
+          clearInterval(repeatInterval);
+          repeatInterval = null;
+        }
+        store2.handleControlInput(control);
+        repeatTimer = setTimeout(() => {
+          repeatInterval = setInterval(() => store2.handleControlInput(control), 50);
+        }, 400);
+      } else {
+        store2.handleControlInput(control);
       }
-      store2.handleControlInput(control);
-      repeatTimer = setTimeout(() => {
-        repeatInterval = setInterval(() => store2.handleControlInput(control), 50);
-      }, 400);
     };
     window.handleControlEnd = () => {
       if (repeatTimer) {

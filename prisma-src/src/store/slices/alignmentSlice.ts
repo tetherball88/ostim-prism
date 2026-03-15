@@ -3,23 +3,6 @@ import { alignmentFields } from '../../alignmentConfig';
 import { AlignmentPayload } from '../../types';
 import { StoreSlice } from '../types';
 
-// const debounceUpdateAlignment = (() => {
-//     let timeouts: Record<string, number> = {};
-//     return (field: string, value: number, actorIndex: number) => {
-//         if (timeouts[field]) {
-//             window.clearTimeout(timeouts[field]);
-//         }
-//         timeouts[field] = window.setTimeout(() => {
-//             if(typeof value !== 'number' || isNaN(value)) {
-//                 value = 0;
-//             }
-//             console.log("Debounced alignment update", field, value, actorIndex);
-            
-//             delete timeouts[field];
-//         }, 1000);
-//     }
-// })();
-
 export const createAlignmentSlice: StoreSlice<import('../types').AlignmentSlice> = (set) => ({
     alignment: {
         actorIndex: 0,

@@ -780,13 +780,6 @@ void PrismaUIManager::OnAction(const char* data) {
         } else if (action == "alignmentSet") {
             auto payload = actionData.value("payload", json::object());
             uint32_t actorIndex = payload.value("actorIndex", 0u);
-            std::string field = payload.value("field", "");
-            float value = payload.value("value", 0.0f);
-
-            if (field.empty()) {
-                SKSE::log::warn("alignmentSet missing field");
-                return;
-            }
 
             uint32_t threadID = dataProvider->GetCurrentThreadID();
             if (threadID != 0) {
@@ -795,21 +788,12 @@ void PrismaUIManager::OnAction(const char* data) {
             }
 
             OStimDataProvider::AlignmentData alignData{};
-            if (!dataProvider->GetActorAlignment(threadID, actorIndex, alignData)) {
-                SKSE::log::warn("Failed to fetch alignment data for set (actorIndex={})", actorIndex);
-                return;
-            }
-
-            if (field == "offsetX") alignData.offsetX = value;
-            else if (field == "offsetY") alignData.offsetY = value;
-            else if (field == "offsetZ") alignData.offsetZ = value;
-            else if (field == "scale") alignData.scale = value;
-            else if (field == "rotation") alignData.rotation = value;
-            else if (field == "sosBend") alignData.sosBend = value;
-            else {
-                SKSE::log::warn("alignmentSet unknown field: {}", field);
-                return;
-            }
+            alignData.offsetX  = payload.value("offsetX",  0.0f);
+            alignData.offsetY  = payload.value("offsetY",  0.0f);
+            alignData.offsetZ  = payload.value("offsetZ",  0.0f);
+            alignData.scale    = payload.value("scale",    1.0f);
+            alignData.rotation = payload.value("rotation", 0.0f);
+            alignData.sosBend  = payload.value("sosBend",  0.0f);
 
             if (!dataProvider->SetActorAlignment(threadID, actorIndex, alignData)) {
                 SKSE::log::warn("Failed to apply alignment set (actorIndex={})", actorIndex);

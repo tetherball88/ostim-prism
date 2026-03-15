@@ -23,7 +23,6 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 payload: { shouldFocus: true }
             }));
         }
-        console.log(`Focus block after menu update: ${state.focusBlock}`);
         return {
             activeMenu: menu,
             focusBlock: 'menu',

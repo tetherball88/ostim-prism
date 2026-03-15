@@ -1,3 +1,4 @@
+import { useOStimStore } from '../store';
 import { StoreState } from '../store/types';
 import { ActiveMenu, AlignmentPayload, SearchResult, ThreadStatus } from '../types';
 import { convertScanCodeToJS } from '../utils/scanCodeMap';
@@ -69,8 +70,13 @@ export function setupGameIntegration(store: StoreState) {
     };
 
     window.showMenu = (menu: ActiveMenu) => {
-        console.log("showMenu called with:", menu);
-        store.updateActiveMenu(menu);
+        const recentStore = useOStimStore.getState()
+        const currentMenu = recentStore.activeMenu;
+        if(currentMenu == menu) {
+            store.updateActiveMenu('navigation');
+        } else {
+            store.updateActiveMenu(menu);
+        }
     };
 
     window.handleControl = (control: string) => {
@@ -81,12 +87,30 @@ export function setupGameIntegration(store: StoreState) {
     let repeatInterval: ReturnType<typeof setInterval> | null = null;
 
     window.handleControlStart = (control: string) => {
-        if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
-        if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
-        store.handleControlInput(control);
-        repeatTimer = setTimeout(() => {
-            repeatInterval = setInterval(() => store.handleControlInput(control), 50);
-        }, 400);
+        const recentStore = useOStimStore.getState()
+        const lowerCaseControl = control.toLowerCase();
+        let shouldListenToHold = false;
+        if(recentStore.focusBlock === 'buttons') {
+            shouldListenToHold = lowerCaseControl === 'up' || lowerCaseControl === 'down';
+        } else if(recentStore.focusBlock === 'menu') {
+            if(recentStore.activeMenu === 'alignMenu') {
+                shouldListenToHold = lowerCaseControl === 'left' || lowerCaseControl === 'right';
+            }
+
+            if(recentStore.activeMenu === 'searchMenu' || recentStore.activeMenu === 'navigation' || recentStore.activeMenu === 'utilityOptions') {
+                shouldListenToHold = lowerCaseControl === 'up' || lowerCaseControl === 'down';
+            }
+        }
+        if (shouldListenToHold) {
+            if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
+            if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+            store.handleControlInput(control);
+            repeatTimer = setTimeout(() => {
+                repeatInterval = setInterval(() => store.handleControlInput(control), 50);
+            }, 400);
+        } else {
+            store.handleControlInput(control);
+        }
     };
 
     window.handleControlEnd = () => {

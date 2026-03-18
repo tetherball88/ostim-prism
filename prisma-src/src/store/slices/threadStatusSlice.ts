@@ -8,7 +8,7 @@ const initialThreadStatus: ThreadStatus = {
     locked: false,
     currentSpeed: 1,
     minSpeed: 1,
-    maxSpeed: 1,
+    maxSpeed: 5,
 };
 
 export const createThreadStatusSlice: StoreSlice<import('../types').ThreadStatusSlice> = (set, get) => ({

@@ -15,7 +15,6 @@ export function ThreadStatus() {
     const cy = 60;
     const strokeWidth = 10;
     const radius = (size - strokeWidth) / 2; // 55
-    const circumference = radius * 2 * Math.PI;
     const rotation = 135; // gap at bottom, 270° arc
 
     const hasRange = minSpeed !== maxSpeed;
@@ -24,7 +23,6 @@ export function ThreadStatus() {
     const segmentCount = hasRange ? maxSpeed - minSpeed + 1 : 1;
     const gapDeg = segmentCount > 1 ? 4 : 0;
     const segmentDeg = (270 - gapDeg * (segmentCount - 1)) / segmentCount;
-    const segmentLen = circumference * (segmentDeg / 360);
 
     const dim = 'rgba(200, 168, 75, 0.18)';
     const amber = '#c8a84b';
@@ -34,6 +32,17 @@ export function ThreadStatus() {
     const manualColor = manualControl ? amber      : dim;
     const lockedColor = locked        ? amberLight : dim;
 
+    /** Build an SVG arc path string for a single segment. */
+    const describeArc = (startDeg: number, endDeg: number) => {
+        const toRad = (d: number) => (d * Math.PI) / 180;
+        const x1 = cx + radius * Math.cos(toRad(startDeg));
+        const y1 = cy + radius * Math.sin(toRad(startDeg));
+        const x2 = cx + radius * Math.cos(toRad(endDeg));
+        const y2 = cy + radius * Math.sin(toRad(endDeg));
+        const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+        return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
+    };
+
     return (
         <div className="thread-status">
             <svg
@@ -41,21 +50,23 @@ export function ThreadStatus() {
                 style={{ width: 'var(--pb-size, 8rem)', height: 'var(--pb-size, 8rem)', overflow: 'visible' }}
                 overflow="visible"
             >
-                {/* ── Segmented speedometer — one arc per speed step ── */}
+                {/* ── Segmented speedometer — one arc path per speed step ── */}
+                {/* Using <path> arcs (not full <circle> rings) so each element's   */}
+                {/* hit-test area only covers its own segment, fixing Ultralight's  */}
+                {/* pointer-event ordering issue where the last circle always won.  */}
                 {Array.from({ length: segmentCount }, (_, i) => {
                     const startDeg = rotation + i * (segmentDeg + gapDeg);
-                    const filled = (minSpeed + i) <= currentSpeed;
+                    const endDeg   = startDeg + segmentDeg;
+                    const filled   = (minSpeed + i) <= currentSpeed;
                     const speedNum = minSpeed + i;
                     return (
-                        <circle
+                        <path
                             key={i}
-                            cx={cx} cy={cy} r={radius}
+                            d={describeArc(startDeg, endDeg)}
                             fill="none"
                             stroke={filled ? amber : dim}
                             strokeWidth={strokeWidth}
                             strokeLinecap="butt"
-                            strokeDasharray={`${segmentLen} ${circumference}`}
-                            transform={`rotate(${startDeg} ${cx} ${cy})`}
                             style={{ cursor: 'pointer' }}
                             onClick={() => setThreadSpeed(speedNum)}
                             {...tooltipOn(`Speed ${speedNum}`)}

@@ -17,5 +17,10 @@ export function useTooltip() {
         onMouseLeave: () => setTooltip(prev => ({ ...prev, visible: false })),
     });
 
-    return { tooltip, tooltipOn };
+    const showTooltip = (text: string, x: number, y: number) =>
+        setTooltip({ visible: true, x, y, text });
+    const hideTooltip = () =>
+        setTooltip(prev => ({ ...prev, visible: false }));
+
+    return { tooltip, tooltipOn, showTooltip, hideTooltip };
 }

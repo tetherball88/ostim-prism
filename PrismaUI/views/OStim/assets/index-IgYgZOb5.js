@@ -6975,7 +6975,9 @@
       onMouseMove: (e) => setTooltip((prev) => ({ ...prev, x: e.clientX, y: e.clientY })),
       onMouseLeave: () => setTooltip((prev) => ({ ...prev, visible: false }))
     });
-    return { tooltip, tooltipOn };
+    const showTooltip = (text, x2, y2) => setTooltip({ visible: true, x: x2, y: y2, text });
+    const hideTooltip = () => setTooltip((prev) => ({ ...prev, visible: false }));
+    return { tooltip, tooltipOn, showTooltip, hideTooltip };
   }
   function Tooltip({ visible, x: x2, y: y2, text }) {
     if (!visible || !text) return null;
@@ -7421,7 +7423,7 @@
     setAlignmentActiveField: (index) => set((state) => ({
       alignment: { ...state.alignment, activeField: index }
     })),
-    updateAlignmentField: ({ index, value }) => set((state) => {
+    updateAlignmentField: ({ index, value, rawInput }) => set((state) => {
       var _a;
       const fieldConfig = alignmentFields[index];
       if (!fieldConfig) return state;
@@ -7434,7 +7436,11 @@
       }
       const clampedValue = Math.max(minFinal, Math.min(value, maxFinal));
       const nextInputValues = [...state.alignment.inputValues];
-      nextInputValues[index] = fieldConfig.precision !== void 0 ? value.toFixed(fieldConfig.precision) : Math.round(value).toString();
+      if (rawInput !== void 0) {
+        nextInputValues[index] = rawInput;
+      } else {
+        nextInputValues[index] = fieldConfig.precision !== void 0 ? value.toFixed(fieldConfig.precision) : Math.round(value).toString();
+      }
       const { activeField, inputValues, ...baseAlignment } = state.alignment;
       const newAlignmentPayload = {
         ...baseAlignment,
@@ -7449,10 +7455,10 @@
         };
       }
       console.log("Updating alignment field", fieldConfig.key, clampedValue, newAlignmentPayload.actorIndex);
-      if (typeof value === "number" && !isNaN(value)) {
+      if (typeof value === "number" && !isNaN(value) && rawInput === void 0) {
         (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({
           action: fieldConfig.key === "actor" ? "alignmentSelectActor" : "alignmentSet",
-          payload: fieldConfig.key === "actor" ? { actorIndex: newAlignmentPayload.actorIndex } : { actorIndex: newAlignmentPayload.actorIndex, ...newAlignmentPayload.data }
+          payload: fieldConfig.key === "actor" ? { actorIndex: newAlignmentPayload.actorIndex } : { actorIndex: newAlignmentPayload.actorIndex, field: fieldConfig.key, value: clampedValue }
         }));
       }
       console.log("Updated alignment field in state", {
@@ -7623,7 +7629,7 @@
     locked: false,
     currentSpeed: 1,
     minSpeed: 1,
-    maxSpeed: 1
+    maxSpeed: 5
   };
   const createThreadStatusSlice = (set, get) => ({
     threadStatus: initialThreadStatus,
@@ -7687,25 +7693,68 @@
       additionalProgress = -1;
     }
     const size = 120;
+    const cx = size / 2;
     const strokeWidth = 14;
     const radius = (size - strokeWidth) / 2;
-    const circumference = radius * 2 * Math.PI;
-    const arcFraction = 0.75;
-    const arcLength = circumference * arcFraction;
-    const filledLength = excitementProgress / 100 * arcLength;
     const rotation = 135;
     const highThreshold = 75;
     const isHighProgress = excitementProgress >= highThreshold;
     const pulseDuration = Math.max(isHighProgress ? 2 - (excitementProgress - highThreshold) / 25 * 1.5 : 0, 0.5);
     const outerStrokeWidth = 6;
     const outerRadius = radius + strokeWidth / 2 + outerStrokeWidth / 2;
-    const outerCircumference = outerRadius * 2 * Math.PI;
-    const outerArcLength = outerCircumference * arcFraction;
-    const halfOuterArc = outerArcLength / 2;
-    const leftFilledLength = staminaProgress / 100 * halfOuterArc;
-    const rightFilledLength = additionalProgress / 100 * halfOuterArc;
     const color = genderColors[gender];
-    const { tooltip, tooltipOn } = useTooltip();
+    const { tooltip, showTooltip, hideTooltip } = useTooltip();
+    const describeArc = (r2, startDeg, endDeg) => {
+      const toRad = (d) => d * Math.PI / 180;
+      const x1 = cx + r2 * Math.cos(toRad(startDeg));
+      const y1 = cx + r2 * Math.sin(toRad(startDeg));
+      const x2 = cx + r2 * Math.cos(toRad(endDeg));
+      const y2 = cx + r2 * Math.sin(toRad(endDeg));
+      const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+      return `M ${x1} ${y1} A ${r2} ${r2} 0 ${largeArc} 1 ${x2} ${y2}`;
+    };
+    const handleMouseMove = (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const vx = (e.clientX - rect.left) * (size / rect.width);
+      const vy = (e.clientY - rect.top) * (size / rect.height);
+      const dx = vx - cx;
+      const dy = vy - cx;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const innerMin = radius - strokeWidth / 2;
+      const innerMax = radius + strokeWidth / 2;
+      const outerMin = outerRadius - outerStrokeWidth / 2;
+      const outerMax = outerRadius + outerStrokeWidth / 2;
+      if (dist < innerMin) {
+        showTooltip(`Orgasmed ${timesClimaxed} times`, e.clientX, e.clientY);
+        return;
+      }
+      let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      if (angle < 0) angle += 360;
+      let rel = angle - rotation;
+      if (rel < 0) rel += 360;
+      if (dist >= innerMin && dist <= innerMax) {
+        if (rel <= 270) {
+          showTooltip(`Excitement ${Math.round(excitementProgress)}%`, e.clientX, e.clientY);
+        } else {
+          hideTooltip();
+        }
+        return;
+      }
+      if (dist >= outerMin && dist <= outerMax) {
+        if (rel <= 135) {
+          showTooltip(`Stamina ${Math.round(staminaProgress)}%`, e.clientX, e.clientY);
+        } else if (rel <= 270 && additionalProgress !== -1) {
+          showTooltip(`Cum ${Math.round(additionalProgress)}%`, e.clientX, e.clientY);
+        } else {
+          hideTooltip();
+        }
+        return;
+      }
+      hideTooltip();
+    };
+    const outerLeftFillEnd = rotation + staminaProgress / 100 * 135;
+    const outerRightFillStart = rotation + 270 - additionalProgress / 100 * 135;
+    const innerFillEnd = rotation + excitementProgress / 100 * 270;
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
@@ -7717,97 +7766,75 @@
             {
               viewBox: `0 0 ${size} ${size}`,
               style: { width: "var(--pb-size, 8rem)", height: "var(--pb-size, 8rem)", overflow: "visible" },
+              onMouseMove: handleMouseMove,
+              onMouseLeave: hideTooltip,
               children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { ...tooltipOn(`Stamina ${Math.round(staminaProgress)}%`), children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "circle",
-                    {
-                      className: "outer-ring-left-bg",
-                      cx: size / 2,
-                      cy: size / 2,
-                      r: outerRadius,
-                      strokeWidth: outerStrokeWidth,
-                      stroke: "#95ed6480",
-                      fill: "none",
-                      strokeDasharray: `${halfOuterArc} ${outerCircumference}`,
-                      transform: `rotate(${rotation} ${size / 2} ${size / 2})`
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "circle",
-                    {
-                      className: "outer-ring-left",
-                      cx: size / 2,
-                      cy: size / 2,
-                      r: outerRadius,
-                      strokeWidth: outerStrokeWidth,
-                      stroke: "#95ed64",
-                      fill: "none",
-                      strokeDasharray: `${leftFilledLength} ${outerCircumference}`,
-                      transform: `rotate(${rotation} ${size / 2} ${size / 2})`
-                    }
-                  )
-                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    className: "outer-ring-left-bg",
+                    d: describeArc(outerRadius, rotation, rotation + 135),
+                    strokeWidth: outerStrokeWidth,
+                    stroke: "#95ed6480",
+                    fill: "none"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    className: "outer-ring-left",
+                    d: describeArc(outerRadius, rotation, outerLeftFillEnd),
+                    strokeWidth: outerStrokeWidth,
+                    stroke: "#95ed64",
+                    fill: "none",
+                    style: { pointerEvents: "none" }
+                  }
+                ),
                 additionalProgress === -1 ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "circle",
+                    "path",
                     {
                       className: "outer-ring-right-bg",
-                      cx: size / 2,
-                      cy: size / 2,
-                      r: outerRadius,
+                      d: describeArc(outerRadius, rotation + 135, rotation + 270),
                       strokeWidth: outerStrokeWidth,
                       stroke: "#C5C5C5",
-                      fill: "none",
-                      strokeDasharray: `${halfOuterArc} ${outerCircumference}`,
-                      transform: `rotate(${rotation + 135} ${size / 2} ${size / 2})`
+                      fill: "none"
                     }
                   ),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "circle",
+                    "path",
                     {
                       className: "outer-ring-right",
-                      cx: size / 2,
-                      cy: size / 2,
-                      r: outerRadius,
+                      d: describeArc(outerRadius, outerRightFillStart, rotation + 270),
                       strokeWidth: outerStrokeWidth,
                       stroke: "#FFFFF0",
                       fill: "none",
-                      strokeDasharray: `0 ${halfOuterArc - rightFilledLength} ${rightFilledLength} ${outerCircumference}`,
-                      transform: `rotate(${rotation + 135} ${size / 2} ${size / 2})`
+                      style: { pointerEvents: "none" }
                     }
                   )
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { ...tooltipOn(`Excitement ${Math.round(excitementProgress)}%`), children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "circle",
-                    {
-                      className: "progress-bg",
-                      cx: size / 2,
-                      cy: size / 2,
-                      r: radius,
-                      stroke: `${color}80`,
-                      strokeWidth,
-                      strokeDasharray: `${arcLength} ${circumference}`,
-                      transform: `rotate(${rotation} ${size / 2} ${size / 2})`
-                    }
-                  ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "circle",
-                    {
-                      className: "progress-fill",
-                      cx: size / 2,
-                      cy: size / 2,
-                      r: radius,
-                      strokeWidth,
-                      stroke: color,
-                      style: { color },
-                      strokeDasharray: `${filledLength} ${circumference}`,
-                      transform: `rotate(${rotation} ${size / 2} ${size / 2})`
-                    }
-                  )
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { ...tooltipOn(`Orgasmed ${timesClimaxed} times`), children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    className: "progress-bg",
+                    d: describeArc(radius, rotation, rotation + 270),
+                    stroke: `${color}80`,
+                    strokeWidth,
+                    fill: "none"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "path",
+                  {
+                    className: "progress-fill",
+                    d: describeArc(radius, rotation, innerFillEnd),
+                    strokeWidth,
+                    stroke: color,
+                    style: { color, pointerEvents: "none" },
+                    fill: "none"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "rect",
                     {
@@ -7869,19 +7896,26 @@
     const cy = 60;
     const strokeWidth = 10;
     const radius = (size - strokeWidth) / 2;
-    const circumference = radius * 2 * Math.PI;
     const rotation = 135;
     const hasRange = minSpeed !== maxSpeed;
     const segmentCount = hasRange ? maxSpeed - minSpeed + 1 : 1;
     const gapDeg = segmentCount > 1 ? 4 : 0;
     const segmentDeg = (270 - gapDeg * (segmentCount - 1)) / segmentCount;
-    const segmentLen = circumference * (segmentDeg / 360);
     const dim = "rgba(200, 168, 75, 0.18)";
     const amber = "#c8a84b";
     const amberLight = "#e8c96a";
     const autoColor = autoControl ? amber : dim;
     const manualColor = manualControl ? amber : dim;
     const lockedColor = locked ? amberLight : dim;
+    const describeArc = (startDeg, endDeg) => {
+      const toRad = (d) => d * Math.PI / 180;
+      const x1 = cx + radius * Math.cos(toRad(startDeg));
+      const y1 = cy + radius * Math.sin(toRad(startDeg));
+      const x2 = cx + radius * Math.cos(toRad(endDeg));
+      const y2 = cy + radius * Math.sin(toRad(endDeg));
+      const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+      return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
+    };
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "thread-status", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "svg",
@@ -7892,20 +7926,17 @@
           children: [
             Array.from({ length: segmentCount }, (_, i) => {
               const startDeg = rotation + i * (segmentDeg + gapDeg);
+              const endDeg = startDeg + segmentDeg;
               const filled = minSpeed + i <= currentSpeed;
               const speedNum = minSpeed + i;
               return /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "circle",
+                "path",
                 {
-                  cx,
-                  cy,
-                  r: radius,
+                  d: describeArc(startDeg, endDeg),
                   fill: "none",
                   stroke: filled ? amber : dim,
                   strokeWidth,
                   strokeLinecap: "butt",
-                  strokeDasharray: `${segmentLen} ${circumference}`,
-                  transform: `rotate(${startDeg} ${cx} ${cy})`,
                   style: { cursor: "pointer" },
                   onClick: () => setThreadSpeed(speedNum),
                   ...tooltipOn(`Speed ${speedNum}`)
@@ -8415,6 +8446,7 @@
     const focusBlock = useOStimStore((state) => state.focusBlock);
     const keys = useOStimStore((state) => state.keys);
     const inputRefs = reactExports.useRef([]);
+    const sendActionTimerRef = reactExports.useRef(null);
     const inputValues = alignment.inputValues;
     reactExports.useEffect(() => {
       let lastKey = null;
@@ -8525,8 +8557,22 @@
                   updateAlignmentField({
                     index,
                     value: parsed,
-                    type: field.key === "actor" ? "actorIndex" : "alignmentData"
+                    type: field.key === "actor" ? "actorIndex" : "alignmentData",
+                    rawInput: event.target.value
                   });
+                  if (!isNaN(parsed)) {
+                    if (sendActionTimerRef.current) clearTimeout(sendActionTimerRef.current);
+                    sendActionTimerRef.current = setTimeout(() => {
+                      var _a;
+                      const minVal = field.key === "actor" ? 1 : field.min ?? Number.NEGATIVE_INFINITY;
+                      const maxVal = field.key === "actor" ? Math.max(alignment.actorCount, 1) : field.max ?? Number.POSITIVE_INFINITY;
+                      const clamped = Math.max(minVal, Math.min(parsed, maxVal));
+                      (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({
+                        action: field.key === "actor" ? "alignmentSelectActor" : "alignmentSet",
+                        payload: field.key === "actor" ? { actorIndex: Math.round(clamped) - 1 } : { actorIndex: alignment.actorIndex, field: field.key, value: clamped }
+                      }));
+                    }, 400);
+                  }
                 },
                 onBlur: handleInputBlur
               }
@@ -8623,7 +8669,6 @@
     const activeMenu = useOStimStore((state) => state.activeMenu);
     const focusBlock = useOStimStore((state) => state.focusBlock);
     reactExports.useEffect(() => {
-      console.log("INIT:", true);
       updateActiveMenu("navigation");
     }, []);
     useControls();
@@ -8855,12 +8900,9 @@
     window.showMenu = (menu) => {
       const recentStore = useOStimStore.getState();
       const currentMenu = recentStore.activeMenu;
-      console.log("showMenu called with:", menu, currentMenu);
       if (currentMenu == menu) {
-        console.log("Toggling menu to navigation, current activeMenu:", currentMenu);
         store2.updateActiveMenu("navigation");
       } else {
-        console.log("Switching menu, current activeMenu:", currentMenu);
         store2.updateActiveMenu(menu);
       }
     };

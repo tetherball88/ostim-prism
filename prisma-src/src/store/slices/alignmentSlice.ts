@@ -55,7 +55,7 @@ export const createAlignmentSlice: StoreSlice<import('../types').AlignmentSlice>
     setAlignmentActiveField: (index: number) => set((state) => ({
         alignment: { ...state.alignment, activeField: index }
     })),
-    updateAlignmentField: ({index, value}) => set((state) => {
+    updateAlignmentField: ({index, value, rawInput}) => set((state) => {
         const fieldConfig = alignmentFields[index];
         if (!fieldConfig) return state;
 
@@ -71,9 +71,13 @@ export const createAlignmentSlice: StoreSlice<import('../types').AlignmentSlice>
         const clampedValue = Math.max(minFinal, Math.min(value, maxFinal));
         
         const nextInputValues = [...state.alignment.inputValues];
-        nextInputValues[index] = fieldConfig.precision !== undefined
-            ? value.toFixed(fieldConfig.precision)
-            : Math.round(value).toString();
+        if (rawInput !== undefined) {
+            nextInputValues[index] = rawInput;
+        } else {
+            nextInputValues[index] = fieldConfig.precision !== undefined
+                ? value.toFixed(fieldConfig.precision)
+                : Math.round(value).toString();
+        }
 
         const { activeField, inputValues, ...baseAlignment } = state.alignment;
         
@@ -94,7 +98,7 @@ export const createAlignmentSlice: StoreSlice<import('../types').AlignmentSlice>
 
         console.log("Updating alignment field", fieldConfig.key, clampedValue, newAlignmentPayload.actorIndex);
 
-        if(typeof value === 'number' && !isNaN(value)) {
+        if(typeof value === 'number' && !isNaN(value) && rawInput === undefined) {
             window.sendAction?.(JSON.stringify({
                 action: fieldConfig.key === 'actor' ? 'alignmentSelectActor' : 'alignmentSet',
                 payload: fieldConfig.key === 'actor' ? { actorIndex: newAlignmentPayload.actorIndex } : { actorIndex: newAlignmentPayload.actorIndex, field: fieldConfig.key, value: clampedValue }

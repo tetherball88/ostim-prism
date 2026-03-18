@@ -17,6 +17,7 @@ export const AlignmentMenu = () => {
   const keys = useOStimStore(state => state.keys);
 
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const sendActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputValues = alignment.inputValues;
   
   useEffect(() => {
@@ -135,8 +136,23 @@ export const AlignmentMenu = () => {
                 updateAlignmentField({
                   index,
                   value: parsed,
-                  type: field.key === 'actor' ? 'actorIndex' : 'alignmentData'
+                  type: field.key === 'actor' ? 'actorIndex' : 'alignmentData',
+                  rawInput: event.target.value
                 });
+                if (!isNaN(parsed)) {
+                  if (sendActionTimerRef.current) clearTimeout(sendActionTimerRef.current);
+                  sendActionTimerRef.current = setTimeout(() => {
+                    const minVal = field.key === 'actor' ? 1 : (field.min ?? Number.NEGATIVE_INFINITY);
+                    const maxVal = field.key === 'actor' ? Math.max(alignment.actorCount, 1) : (field.max ?? Number.POSITIVE_INFINITY);
+                    const clamped = Math.max(minVal, Math.min(parsed, maxVal));
+                    window.sendAction?.(JSON.stringify({
+                      action: field.key === 'actor' ? 'alignmentSelectActor' : 'alignmentSet',
+                      payload: field.key === 'actor'
+                        ? { actorIndex: Math.round(clamped) - 1 }
+                        : { actorIndex: alignment.actorIndex, field: field.key, value: clamped }
+                    }));
+                  }, 400);
+                }
               }}
               onBlur={handleInputBlur}
             />

@@ -49,6 +49,7 @@ export interface UpdateAlignmentFieldOptions {
     index: number;
     value: number;
     type: 'actorIndex' | 'alignmentData';
+    rawInput?: string;
 }
 
 export interface AlignmentSlice {

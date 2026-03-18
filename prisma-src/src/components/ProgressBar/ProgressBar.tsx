@@ -28,16 +28,9 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
   }
 
   const size = 120;
+  const cx = size / 2;
   const strokeWidth = 14;
   const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-
-  // Horseshoe: 270 degrees (75% of circle), gap at bottom
-  const arcFraction = 0.75;
-  const arcLength = circumference * arcFraction;
-
-  // Progress fill: only draw the filled portion
-  const filledLength = (excitementProgress / 100) * arcLength;
 
   // Rotation: 135° puts the start at bottom-left, arc goes clockwise to bottom-right
   const rotation = 135;
@@ -54,16 +47,81 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
   // Outer ring - same horseshoe shape, split at top
   const outerStrokeWidth = 6;
   const outerRadius = radius + strokeWidth / 2 + outerStrokeWidth / 2;
-  const outerCircumference = outerRadius * 2 * Math.PI;
-  const outerArcLength = outerCircumference * arcFraction; // 270°
-  const halfOuterArc = outerArcLength / 2; // 135° each segment
-
-  const leftFilledLength = (staminaProgress / 100) * halfOuterArc;
-  const rightFilledLength = (additionalProgress / 100) * halfOuterArc;
 
   const color = genderColors[gender];
 
-  const { tooltip, tooltipOn } = useTooltip();
+  const { tooltip, showTooltip, hideTooltip } = useTooltip();
+
+  /** Build an SVG arc path for radius r from startDeg to endDeg (clockwise). */
+  const describeArc = (r: number, startDeg: number, endDeg: number): string => {
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(toRad(startDeg));
+    const y1 = cx + r * Math.sin(toRad(startDeg));
+    const x2 = cx + r * Math.cos(toRad(endDeg));
+    const y2 = cx + r * Math.sin(toRad(endDeg));
+    const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+  };
+
+  /**
+   * Geometric mouse handler — no SVG hit-testing involved.
+   * Checks radial distance to pick inner/outer ring, then angle for the segment.
+   */
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) * (size / rect.width);
+    const vy = (e.clientY - rect.top)  * (size / rect.height);
+    const dx = vx - cx;
+    const dy = vy - cx;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    const innerMin = radius - strokeWidth / 2;
+    const innerMax = radius + strokeWidth / 2;
+    const outerMin = outerRadius - outerStrokeWidth / 2;
+    const outerMax = outerRadius + outerStrokeWidth / 2;
+
+    // Center zone → climax icon
+    if (dist < innerMin) {
+      showTooltip(`Orgasmed ${timesClimaxed} times`, e.clientX, e.clientY);
+      return;
+    }
+
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    if (angle < 0) angle += 360;
+    // Degrees relative to ring start (rotation), clockwise
+    let rel = angle - rotation;
+    if (rel < 0) rel += 360;
+
+    if (dist >= innerMin && dist <= innerMax) {
+      // Inner ring: excitement spans 0°–270° relative
+      if (rel <= 270) {
+        showTooltip(`Excitement ${Math.round(excitementProgress)}%`, e.clientX, e.clientY);
+      } else {
+        hideTooltip();
+      }
+      return;
+    }
+
+    if (dist >= outerMin && dist <= outerMax) {
+      if (rel <= 135) {
+        showTooltip(`Stamina ${Math.round(staminaProgress)}%`, e.clientX, e.clientY);
+      } else if (rel <= 270 && additionalProgress !== -1) {
+        showTooltip(`Cum ${Math.round(additionalProgress)}%`, e.clientX, e.clientY);
+      } else {
+        hideTooltip();
+      }
+      return;
+    }
+
+    hideTooltip();
+  };
+
+  // Outer left (stamina): BG spans 135°→270°. Fill grows from 135° clockwise.
+  const outerLeftFillEnd  = rotation + (staminaProgress / 100) * 135;
+  // Outer right (cum): BG spans 270°→405°. Fill anchored at 405°, grows backward.
+  const outerRightFillStart = rotation + 270 - (additionalProgress / 100) * 135;
+  // Inner (excitement): BG spans 135°→405°. Fill grows from 135° clockwise.
+  const innerFillEnd = rotation + (excitementProgress / 100) * 270;
 
   return (
     <div
@@ -73,89 +131,64 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
       <svg
         viewBox={`0 0 ${size} ${size}`}
         style={{ width: 'var(--pb-size, 8rem)', height: 'var(--pb-size, 8rem)', overflow: 'visible' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={hideTooltip}
       >
-        <g {...tooltipOn(`Stamina ${Math.round(staminaProgress)}%`)}>
-          {/* Outer ring - green segment (left half: bottom-left to top) */}
-          <circle
-            className="outer-ring-left-bg"
-            cx={size / 2}
-            cy={size / 2}
-            r={outerRadius}
-            strokeWidth={outerStrokeWidth}
-            stroke="#95ed6480"
-            fill="none"
-            strokeDasharray={`${halfOuterArc} ${outerCircumference}`}
-            transform={`rotate(${rotation} ${size / 2} ${size / 2})`}
-          />
-          <circle
-            className="outer-ring-left"
-            cx={size / 2}
-            cy={size / 2}
-            r={outerRadius}
-            strokeWidth={outerStrokeWidth}
-            stroke="#95ed64"
-            fill="none"
-            strokeDasharray={`${leftFilledLength} ${outerCircumference}`}
-            transform={`rotate(${rotation} ${size / 2} ${size / 2})`}
-          />
-        </g>
+        {/* Outer ring - green segment (left half: bottom-left to top) */}
+        <path
+          className="outer-ring-left-bg"
+          d={describeArc(outerRadius, rotation, rotation + 135)}
+          strokeWidth={outerStrokeWidth}
+          stroke="#95ed6480"
+          fill="none"
+        />
+        <path
+          className="outer-ring-left"
+          d={describeArc(outerRadius, rotation, outerLeftFillEnd)}
+          strokeWidth={outerStrokeWidth}
+          stroke="#95ed64"
+          fill="none"
+          style={{ pointerEvents: 'none' }}
+        />
         {
           additionalProgress === -1 ? null : (
-            <>  
-            {/* Outer ring - ivory segment (right half: top to bottom-right) */}
-            <circle
-              className="outer-ring-right-bg"
-              cx={size / 2}
-              cy={size / 2}
-              r={outerRadius}
-              strokeWidth={outerStrokeWidth}
-              stroke="#C5C5C5"
-              fill="none"
-              strokeDasharray={`${halfOuterArc} ${outerCircumference}`}
-              transform={`rotate(${rotation + 135} ${size / 2} ${size / 2})`}
-            />
-            <circle
-              className="outer-ring-right"
-              cx={size / 2}
-              cy={size / 2}
-              r={outerRadius}
-              strokeWidth={outerStrokeWidth}
-              stroke="#FFFFF0"
-              fill="none"
-              strokeDasharray={`0 ${halfOuterArc - rightFilledLength} ${rightFilledLength} ${outerCircumference}`}
-              transform={`rotate(${rotation + 135} ${size / 2} ${size / 2})`}
-            />
+            <>
+              {/* Outer ring - ivory segment (right half: top to bottom-right) */}
+              <path
+                className="outer-ring-right-bg"
+                d={describeArc(outerRadius, rotation + 135, rotation + 270)}
+                strokeWidth={outerStrokeWidth}
+                stroke="#C5C5C5"
+                fill="none"
+              />
+              <path
+                className="outer-ring-right"
+                d={describeArc(outerRadius, outerRightFillStart, rotation + 270)}
+                strokeWidth={outerStrokeWidth}
+                stroke="#FFFFF0"
+                fill="none"
+                style={{ pointerEvents: 'none' }}
+              />
             </>
           )
         }
-        <g {...tooltipOn(`Excitement ${Math.round(excitementProgress)}%`)}>
-          <circle
-            className="progress-bg"
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={`${color}80`}
-            strokeWidth={strokeWidth}
-            strokeDasharray={`${arcLength} ${circumference}`}
-            transform={`rotate(${rotation} ${size / 2} ${size / 2})`}
-            
-          />
-          <circle
-            className="progress-fill"
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            strokeWidth={strokeWidth}
-            stroke={color}
-            style={{ color }}
-            strokeDasharray={`${filledLength} ${circumference}`}
-            transform={`rotate(${rotation} ${size / 2} ${size / 2})`}
-          />
-        </g>
-        {/* Climax icon + count on same line, centered in the ring.
-            A transparent rect covers the whole group so pointer events fire
-            even in the gaps between the droplet paths. */}
-        <g {...tooltipOn(`Orgasmed ${timesClimaxed} times`)}>
+        <path
+          className="progress-bg"
+          d={describeArc(radius, rotation, rotation + 270)}
+          stroke={`${color}80`}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <path
+          className="progress-fill"
+          d={describeArc(radius, rotation, innerFillEnd)}
+          strokeWidth={strokeWidth}
+          stroke={color}
+          style={{ color, pointerEvents: 'none' }}
+          fill="none"
+        />
+        {/* Climax icon — tooltip handled geometrically via SVG onMouseMove */}
+        <g>
           {/* Invisible hit area spanning the whole icon+text row */}
           <rect
             x={size / 4}

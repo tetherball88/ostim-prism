@@ -12,6 +12,7 @@ export default defineConfig({
     react(),
     {
       name: 'remove-module-attrs',
+      apply: 'build',
       transformIndexHtml(html) {
         const scripts: string[] = []
         html = html

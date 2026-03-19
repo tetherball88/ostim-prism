@@ -64,6 +64,10 @@ export function setupGameIntegration(store: StoreState) {
         store.updateActorsState(actorsState);
     };
 
+    window.onActorOrgasm = (actorIndex: number) => {
+        store.pinActorOrgasm(actorIndex);
+    };
+
     window.updateThreadStatus = (status: ThreadStatus | string) => {
         const parsed = typeof status === 'string' ? JSON.parse(status) : status;
         store.updateThreadStatus(parsed);

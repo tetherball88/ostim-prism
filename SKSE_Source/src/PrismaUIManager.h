@@ -3,8 +3,13 @@
 #include "PrismaUI_API.h"
 #include "OStimDataProvider.h"
 #include "OstimNG-API-Thread.h"
+#include <atomic>
+#include <chrono>
 
-class PrismaUIManager : public RE::BSTEventSink<RE::InputEvent*> {
+class PrismaUIManager
+    : public RE::BSTEventSink<RE::InputEvent*>
+    , public RE::BSTEventSink<SKSE::ModCallbackEvent>
+    , public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 public:
     static PrismaUIManager* GetSingleton() {
         static PrismaUIManager singleton;
@@ -29,6 +34,8 @@ public:
     void SetTextInputFocus(bool focused);
 
     RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_source) override;
+    RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_source) override;
+    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) override;
 
     static void OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, uint32_t threadID, void* userData);
 
@@ -41,6 +48,13 @@ private:
     uint32_t currentThreadID = INVALID_THREAD_ID;
     bool isPolling = false;
     bool isListeningInput = false;
+    bool isListeningModEvents = false;
+    bool isListeningMenuEvents = false;
+    int openMenuCount = 0;
+    bool hiddenByMenu = false;
+    bool hiddenByUser = false;
+    bool hiddenByIdle = false;
+    std::atomic<int64_t> lastActivityTime{0};
     bool inspectorCreated = false;
     bool isTextInputFocused = false;
     OStimDataProvider::KeyData cachedKeys{};
@@ -48,8 +62,14 @@ private:
     
     void StartPolling();
     void StopPolling();
+    void ApplyVisibility();
+    void ResetIdleTimer();
+    void CheckIdleTimeout();
     void StartListeningInput();
     void StopListeningInput();
+    void StartListeningModEvents();
+    void StartListeningMenuEvents();
+    void StopListeningMenuEvents();
 
     static void OnDomReady(PrismaView view);
     static void OnAction(const char* data);

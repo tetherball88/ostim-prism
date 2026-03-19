@@ -142,6 +142,10 @@ public:
     // Set additional progress for an actor (exposed to Papyrus)
     void SetActorAdditionalProgress(RE::FormID actorID, float progress);
 
+    // Find the 0-based index of an actor in the given thread by their FormID.
+    // Returns -1 if not found.
+    int GetActorIndexByFormID(uint32_t threadID, RE::FormID actorFormID);
+
 private:
     OstimNG_API::Thread::IThreadInterface* ostimAPI = nullptr;
     

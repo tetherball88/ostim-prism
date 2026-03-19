@@ -5,7 +5,7 @@
 namespace Papyrus {
     void SetActorAdditionalProgress(RE::StaticFunctionTag*, RE::Actor* actor, float progress) {
         if (!actor) return;
-        SKSE::log::info("Papyrus call: SetActorAdditionalProgress for actor {} with progress {}", actor->GetFormID(), progress);
+        SKSE::log::info("Papyrus call: SetActorAdditionalProgress for actor {} with progress {}", actor->GetName(), progress);
          OStimDataProvider::GetSingleton()->SetActorAdditionalProgress(actor->GetFormID(), progress);
     }
     

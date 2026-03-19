@@ -290,3 +290,16 @@ void OStimDataProvider::SetActorAdditionalProgress(RE::FormID actorID, float pro
         additionalProgressMap[actorID] = progress;
     }
 }
+
+int OStimDataProvider::GetActorIndexByFormID(uint32_t threadID, RE::FormID actorFormID) {
+    if (!ostimAPI) return -1;
+    constexpr uint32_t MAX_ACTORS = 10;
+    OstimNG_API::Thread::ActorData buffer[MAX_ACTORS];
+    uint32_t count = ostimAPI->GetActors(threadID, buffer, MAX_ACTORS);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (buffer[i].formID == actorFormID) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}

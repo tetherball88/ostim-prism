@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 class Settings {
 public:
@@ -11,6 +12,10 @@ public:
     // Hotkeys
     std::vector<uint32_t> toggleFocusKeys;
     std::vector<uint32_t> toggleInspectorKeys;
+
+    // UI Behaviour
+    int idleTimeoutSec = 30;
+    std::vector<std::string> trackedMenus;
 
 private:
     Settings() = default;

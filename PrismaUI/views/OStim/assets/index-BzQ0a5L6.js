@@ -7482,7 +7482,13 @@
   ];
   const createActorStatsSlice = (set) => ({
     actorsState: mockDataActors,
-    updateActorsState: (actorsState) => set(() => ({ actorsState }))
+    updateActorsState: (actorsState) => set(() => ({ actorsState })),
+    orgasmPinnedUntil: [],
+    pinActorOrgasm: (index) => set((state) => {
+      const updated = [...state.orgasmPinnedUntil];
+      updated[index] = Date.now() + 3e3;
+      return { orgasmPinnedUntil: updated };
+    })
   });
   const createGlobalUISlice = (set, get) => ({
     activeMenu: "navigation",
@@ -7683,15 +7689,70 @@
     neither: "#B39DDB"
   };
   const ProgressBar = ({ index }) => {
+    useOStimStore((state) => state.updateActorsState);
+    useOStimStore((state) => state.actorsState);
     const name = useOStimStore((state) => state.actorsState[index].name);
     const gender = useOStimStore((state) => state.actorsState[index].gender);
-    const excitementProgress = useOStimStore((state) => state.actorsState[index].excitementProgress);
+    const rawExcitementProgress = useOStimStore((state) => state.actorsState[index].excitementProgress);
     const staminaProgress = useOStimStore((state) => state.actorsState[index].staminaProgress);
     const timesClimaxed = useOStimStore((state) => state.actorsState[index].timesClimaxed);
     let additionalProgress = useOStimStore((state) => state.actorsState[index].additionalProgress);
+    const orgasmPinnedUntil = useOStimStore((state) => state.orgasmPinnedUntil[index] ?? 0);
+    const [isPinned, setIsPinned] = reactExports.useState(false);
+    const pinTimerRef = reactExports.useRef(null);
+    const animRef = reactExports.useRef({ excitement: 0, stamina: 0, additional: 0 });
+    const targetRef = reactExports.useRef({ excitement: 0, stamina: 0, additional: 0 });
+    const rafRef = reactExports.useRef(null);
+    const [animProgress, setAnimProgress] = reactExports.useState({ excitement: 0, stamina: 0, additional: 0 });
+    reactExports.useEffect(() => {
+      if (!orgasmPinnedUntil) return;
+      const remaining = orgasmPinnedUntil - Date.now();
+      if (remaining <= 0) return;
+      setIsPinned(true);
+      if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
+      pinTimerRef.current = setTimeout(() => setIsPinned(false), remaining);
+      return () => {
+        if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
+      };
+    }, [orgasmPinnedUntil]);
+    const excitementProgress = isPinned ? 100 : Math.max(rawExcitementProgress, 0);
     if (typeof additionalProgress !== "number") {
       additionalProgress = -1;
     }
+    reactExports.useEffect(() => {
+      targetRef.current = {
+        excitement: excitementProgress,
+        stamina: staminaProgress,
+        additional: Math.max(additionalProgress, 0)
+      };
+      const SPEED = 0.05;
+      const SNAP = 0.1;
+      const lerp = (cur, tgt) => {
+        const diff = tgt - cur;
+        if (Math.abs(diff) <= SNAP) return { val: tgt, moving: false };
+        return { val: cur + diff * SPEED, moving: true };
+      };
+      const tick = () => {
+        const e = lerp(animRef.current.excitement, targetRef.current.excitement);
+        const s = lerp(animRef.current.stamina, targetRef.current.stamina);
+        const a = lerp(animRef.current.additional, targetRef.current.additional);
+        animRef.current = { excitement: e.val, stamina: s.val, additional: a.val };
+        setAnimProgress({ ...animRef.current });
+        if (e.moving || s.moving || a.moving) {
+          rafRef.current = requestAnimationFrame(tick);
+        } else {
+          rafRef.current = null;
+        }
+      };
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(tick);
+      return () => {
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+      };
+    }, [excitementProgress, staminaProgress, additionalProgress]);
     const size = 120;
     const cx = size / 2;
     const strokeWidth = 14;
@@ -7704,14 +7765,15 @@
     const outerRadius = radius + strokeWidth / 2 + outerStrokeWidth / 2;
     const color = genderColors[gender];
     const { tooltip, showTooltip, hideTooltip } = useTooltip();
-    const describeArc = (r2, startDeg, endDeg) => {
+    const describeArc = (r2, startDeg, endDeg, clockwise = true) => {
       const toRad = (d) => d * Math.PI / 180;
       const x1 = cx + r2 * Math.cos(toRad(startDeg));
       const y1 = cx + r2 * Math.sin(toRad(startDeg));
       const x2 = cx + r2 * Math.cos(toRad(endDeg));
       const y2 = cx + r2 * Math.sin(toRad(endDeg));
-      const largeArc = endDeg - startDeg > 180 ? 1 : 0;
-      return `M ${x1} ${y1} A ${r2} ${r2} 0 ${largeArc} 1 ${x2} ${y2}`;
+      const sweep = clockwise ? 1 : 0;
+      const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+      return `M ${x1} ${y1} A ${r2} ${r2} 0 ${largeArc} ${sweep} ${x2} ${y2}`;
     };
     const handleMouseMove = (e) => {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -7752,12 +7814,14 @@
       }
       hideTooltip();
     };
-    const outerLeftFillEnd = rotation + staminaProgress / 100 * 135;
-    const outerRightFillStart = rotation + 270 - additionalProgress / 100 * 135;
-    const innerFillEnd = rotation + excitementProgress / 100 * 270;
+    const innerFillEnd = rotation + 270 * (animProgress.excitement / 100);
+    const outerLeftFillEnd = rotation + 135 * (animProgress.stamina / 100);
+    const outerRightFillEnd = rotation + 270 - 135 * (animProgress.additional / 100);
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
+        onClick: () => {
+        },
         className: `circular-progress${isHighProgress ? " high-progress" : ""}`,
         style: { "--pulse-duration": `${pulseDuration}s`, "--glow-color": color },
         children: [
@@ -7779,7 +7843,7 @@
                     fill: "none"
                   }
                 ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                animProgress.stamina > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "path",
                   {
                     className: "outer-ring-left",
@@ -7801,11 +7865,11 @@
                       fill: "none"
                     }
                   ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  animProgress.additional > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "path",
                     {
                       className: "outer-ring-right",
-                      d: describeArc(outerRadius, outerRightFillStart, rotation + 270),
+                      d: describeArc(outerRadius, rotation + 270, outerRightFillEnd, false),
                       strokeWidth: outerStrokeWidth,
                       stroke: "#FFFFF0",
                       fill: "none",
@@ -7823,15 +7887,15 @@
                     fill: "none"
                   }
                 ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                animProgress.excitement > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "path",
                   {
                     className: "progress-fill",
                     d: describeArc(radius, rotation, innerFillEnd),
                     strokeWidth,
                     stroke: color,
-                    style: { color, pointerEvents: "none" },
-                    fill: "none"
+                    fill: "none",
+                    style: { color, pointerEvents: "none" }
                   }
                 ),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
@@ -8892,6 +8956,9 @@
     window.updateExcitements = (data) => {
       const actorsState = typeof data === "string" ? JSON.parse(data) : data;
       store2.updateActorsState(actorsState);
+    };
+    window.onActorOrgasm = (actorIndex) => {
+      store2.pinActorOrgasm(actorIndex);
     };
     window.updateThreadStatus = (status) => {
       const parsed = typeof status === "string" ? JSON.parse(status) : status;

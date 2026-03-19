@@ -11,4 +11,11 @@ const mockDataActors: ActorStats[] = [
 export const createActorStatsSlice: StoreSlice<import('../types').ActorStatsSlice> = (set) => ({
     actorsState: mockDataActors,
     updateActorsState: (actorsState: ActorStats[]) => set(() => ({ actorsState })),
+    orgasmPinnedUntil: [],
+    pinActorOrgasm: (index: number) =>
+        set((state) => {
+            const updated = [...state.orgasmPinnedUntil];
+            updated[index] = Date.now() + 3000;
+            return { orgasmPinnedUntil: updated };
+        }),
 });

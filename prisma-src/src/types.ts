@@ -93,6 +93,8 @@ declare global {
         updateAlignment(payload: AlignmentPayload | string): void;
         /** Called by Skyrim to update actor excitement/stamina state. */
         updateExcitements(data: ActorStats[] | string): void;
+        /** Called by Skyrim when an actor orgasms — excitement is pinned to 100 for 2s. */
+        onActorOrgasm(actorIndex: number): void;
         /** Called by Skyrim to update thread control state and speed. */
         updateThreadStatus(status: ThreadStatus | string): void;
         /** Called by Skyrim to send a control input (up/down/left/yes). */

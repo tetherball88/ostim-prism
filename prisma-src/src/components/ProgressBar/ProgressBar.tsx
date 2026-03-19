@@ -1,9 +1,10 @@
-import { FC } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { useTooltip } from '../../hooks/useTooltip';
 import { ActorStats } from '../../types';
 import { Tooltip } from '../Tooltip/Tooltip';
 import './ProgressBar.styles.css';
 import { useOStimStore } from '../../store';
+import { isInGame } from '../../utils/isInGame';
 
 type ProgressBarProps = {
   index: number;
@@ -16,16 +17,83 @@ const genderColors: Record<ActorStats['gender'], string> = {
 }
 
 export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
+  const updateActorsState = useOStimStore(state => state.updateActorsState);
+  const actors = useOStimStore(state => state.actorsState);
   const name = useOStimStore(state => state.actorsState[index].name);
   const gender = useOStimStore(state => state.actorsState[index].gender);
-  const excitementProgress = useOStimStore(state => state.actorsState[index].excitementProgress);
+  const rawExcitementProgress = useOStimStore(state => state.actorsState[index].excitementProgress);
   const staminaProgress = useOStimStore(state => state.actorsState[index].staminaProgress);
   const timesClimaxed = useOStimStore(state => state.actorsState[index].timesClimaxed);
   let additionalProgress = useOStimStore(state => state.actorsState[index].additionalProgress);
+  const orgasmPinnedUntil = useOStimStore(state => state.orgasmPinnedUntil[index] ?? 0);
+
+  // While orgasm pin is active, hold excitement at 100
+  const [isPinned, setIsPinned] = useState(false);
+  const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // RAF-based animated progress (avoids strokeDasharray — Ultralight incompatible)
+  const animRef = useRef({ excitement: 0, stamina: 0, additional: 0 });
+  const targetRef = useRef({ excitement: 0, stamina: 0, additional: 0 });
+  const rafRef = useRef<number | null>(null);
+  const [animProgress, setAnimProgress] = useState({ excitement: 0, stamina: 0, additional: 0 });
+
+  useEffect(() => {
+    if (!orgasmPinnedUntil) return;
+    const remaining = orgasmPinnedUntil - Date.now();
+    if (remaining <= 0) return;
+    setIsPinned(true);
+    if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
+    pinTimerRef.current = setTimeout(() => setIsPinned(false), remaining);
+    return () => {
+      if (pinTimerRef.current) clearTimeout(pinTimerRef.current);
+    };
+  }, [orgasmPinnedUntil]);
+
+  const excitementProgress = isPinned ? 100 : Math.max(rawExcitementProgress, 0);
 
   if(typeof additionalProgress !== 'number') {
     additionalProgress = -1
   }
+
+  useEffect(() => {
+    targetRef.current = {
+      excitement: excitementProgress,
+      stamina: staminaProgress,
+      additional: Math.max(additionalProgress as number, 0),
+    };
+
+    const SPEED = 0.05;
+    const SNAP = 0.1;
+
+    const lerp = (cur: number, tgt: number): { val: number; moving: boolean } => {
+      const diff = tgt - cur;
+      if (Math.abs(diff) <= SNAP) return { val: tgt, moving: false };
+      return { val: cur + diff * SPEED, moving: true };
+    };
+
+    const tick = () => {
+      const e = lerp(animRef.current.excitement, targetRef.current.excitement);
+      const s = lerp(animRef.current.stamina, targetRef.current.stamina);
+      const a = lerp(animRef.current.additional, targetRef.current.additional);
+      animRef.current = { excitement: e.val, stamina: s.val, additional: a.val };
+      setAnimProgress({ ...animRef.current });
+      if (e.moving || s.moving || a.moving) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        rafRef.current = null;
+      }
+    };
+
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [excitementProgress, staminaProgress, additionalProgress]);
 
   const size = 120;
   const cx = size / 2;
@@ -52,15 +120,16 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
 
   const { tooltip, showTooltip, hideTooltip } = useTooltip();
 
-  /** Build an SVG arc path for radius r from startDeg to endDeg (clockwise). */
-  const describeArc = (r: number, startDeg: number, endDeg: number): string => {
+  /** Build an SVG arc path for radius r from startDeg to endDeg. */
+  const describeArc = (r: number, startDeg: number, endDeg: number, clockwise = true): string => {
     const toRad = (d: number) => (d * Math.PI) / 180;
     const x1 = cx + r * Math.cos(toRad(startDeg));
     const y1 = cx + r * Math.sin(toRad(startDeg));
     const x2 = cx + r * Math.cos(toRad(endDeg));
     const y2 = cx + r * Math.sin(toRad(endDeg));
-    const largeArc = endDeg - startDeg > 180 ? 1 : 0;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`;
+    const sweep = clockwise ? 1 : 0;
+    const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} ${sweep} ${x2} ${y2}`;
   };
 
   /**
@@ -116,15 +185,29 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
     hideTooltip();
   };
 
-  // Outer left (stamina): BG spans 135°→270°. Fill grows from 135° clockwise.
-  const outerLeftFillEnd  = rotation + (staminaProgress / 100) * 135;
-  // Outer right (cum): BG spans 270°→405°. Fill anchored at 405°, grows backward.
-  const outerRightFillStart = rotation + 270 - (additionalProgress / 100) * 135;
-  // Inner (excitement): BG spans 135°→405°. Fill grows from 135° clockwise.
-  const innerFillEnd = rotation + (excitementProgress / 100) * 270;
+  const innerFillEnd = rotation + 270 * (animProgress.excitement / 100);
+  const outerLeftFillEnd = rotation + 135 * (animProgress.stamina / 100);
+  const outerRightFillEnd = rotation + 270 - 135 * (animProgress.additional / 100);
 
   return (
     <div
+      onClick={() => {
+        if(!isInGame()) {
+          updateActorsState(actors.map((actor, i) => {
+            if(i === index) {
+              const newValue = actor.excitementProgress + 10 > 100 ? 0 : actor.excitementProgress + 10
+              return {
+                ...actor,
+                excitementProgress: newValue,
+                staminaProgress: newValue,
+                additionalProgress: newValue,
+              }
+            } else {
+              return actor
+            }
+          }))
+        }          
+      }}
       className={`circular-progress${isHighProgress ? ' high-progress' : ''}`}
       style={{ '--pulse-duration': `${pulseDuration}s`, '--glow-color': color } as React.CSSProperties}
     >
@@ -142,14 +225,16 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
           stroke="#95ed6480"
           fill="none"
         />
-        <path
-          className="outer-ring-left"
-          d={describeArc(outerRadius, rotation, outerLeftFillEnd)}
-          strokeWidth={outerStrokeWidth}
-          stroke="#95ed64"
-          fill="none"
-          style={{ pointerEvents: 'none' }}
-        />
+        {animProgress.stamina > 0 && (
+          <path
+            className="outer-ring-left"
+            d={describeArc(outerRadius, rotation, outerLeftFillEnd)}
+            strokeWidth={outerStrokeWidth}
+            stroke="#95ed64"
+            fill="none"
+            style={{ pointerEvents: 'none' }}
+          />
+        )}
         {
           additionalProgress === -1 ? null : (
             <>
@@ -161,14 +246,16 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
                 stroke="#C5C5C5"
                 fill="none"
               />
-              <path
-                className="outer-ring-right"
-                d={describeArc(outerRadius, outerRightFillStart, rotation + 270)}
-                strokeWidth={outerStrokeWidth}
-                stroke="#FFFFF0"
-                fill="none"
-                style={{ pointerEvents: 'none' }}
-              />
+              {animProgress.additional > 0 && (
+                <path
+                  className="outer-ring-right"
+                  d={describeArc(outerRadius, rotation + 270, outerRightFillEnd, false)}
+                  strokeWidth={outerStrokeWidth}
+                  stroke="#FFFFF0"
+                  fill="none"
+                  style={{ pointerEvents: 'none' }}
+                />
+              )}
             </>
           )
         }
@@ -179,14 +266,16 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
           strokeWidth={strokeWidth}
           fill="none"
         />
-        <path
-          className="progress-fill"
-          d={describeArc(radius, rotation, innerFillEnd)}
-          strokeWidth={strokeWidth}
-          stroke={color}
-          style={{ color, pointerEvents: 'none' }}
-          fill="none"
-        />
+        {animProgress.excitement > 0 && (
+          <path
+            className="progress-fill"
+            d={describeArc(radius, rotation, innerFillEnd)}
+            strokeWidth={strokeWidth}
+            stroke={color}
+            fill="none"
+            style={{ color, pointerEvents: 'none' }}
+          />
+        )}
         {/* Climax icon — tooltip handled geometrically via SVG onMouseMove */}
         <g>
           {/* Invisible hit area spanning the whole icon+text row */}

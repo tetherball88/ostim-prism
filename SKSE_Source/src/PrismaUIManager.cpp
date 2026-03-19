@@ -36,6 +36,69 @@ void PrismaUIManager::StopListeningInput() {
     }
 }
 
+void PrismaUIManager::StartListeningModEvents() {
+    if (isListeningModEvents) return;
+    auto* source = SKSE::GetModCallbackEventSource();
+    if (source) {
+        source->AddEventSink(static_cast<RE::BSTEventSink<SKSE::ModCallbackEvent>*>(this));
+        isListeningModEvents = true;
+        SKSE::log::info("Started listening for mod callback events");
+    }
+}
+
+void PrismaUIManager::StartListeningMenuEvents() {
+    if (isListeningMenuEvents) return;
+    auto ui = RE::UI::GetSingleton();
+    if (ui) {
+        ui->AddEventSink(static_cast<RE::BSTEventSink<RE::MenuOpenCloseEvent>*>(this));
+        isListeningMenuEvents = true;
+        SKSE::log::info("Started listening for menu open/close events");
+    }
+}
+
+void PrismaUIManager::StopListeningMenuEvents() {
+    if (!isListeningMenuEvents) return;
+    auto ui = RE::UI::GetSingleton();
+    if (ui) {
+        ui->RemoveEventSink(static_cast<RE::BSTEventSink<RE::MenuOpenCloseEvent>*>(this));
+        isListeningMenuEvents = false;
+        openMenuCount = 0;
+        hiddenByMenu = false;
+        SKSE::log::info("Stopped listening for menu open/close events");
+    }
+}
+
+RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
+    const SKSE::ModCallbackEvent* a_event,
+    RE::BSTEventSource<SKSE::ModCallbackEvent>* /*a_source*/)
+{
+    if (!a_event) return RE::BSEventNotifyControl::kContinue;
+    if (a_event->eventName != "ostim_actor_orgasm") return RE::BSEventNotifyControl::kContinue;
+    // Only handle the player thread (threadID is passed as numArg)
+    if (static_cast<int>(a_event->numArg) != 0) return RE::BSEventNotifyControl::kContinue;
+    if (!a_event->sender) return RE::BSEventNotifyControl::kContinue;
+
+    RE::FormID actorID = a_event->sender->GetFormID();
+    SKSE::log::info("Orgasm event received for actor {:08X}", actorID);
+
+    // Proxy the event to the Prisma UI — it owns the excitement display logic
+    SKSE::GetTaskInterface()->AddTask([this, actorID]() {
+        if (!IsViewValid()) return;
+
+        int actorIndex = OStimDataProvider::GetSingleton()->GetActorIndexByFormID(currentThreadID, actorID);
+        if (actorIndex < 0) {
+            SKSE::log::warn("Orgasm: actor {:08X} not found in thread {}", actorID, currentThreadID);
+            return;
+        }
+
+        std::string script = "onActorOrgasm(" + std::to_string(actorIndex) + ")";
+        prismaUI->Invoke(view, script.c_str());
+        SKSE::log::info("Proxied orgasm event to UI for actor index {}", actorIndex);
+    });
+
+    return RE::BSEventNotifyControl::kContinue;
+}
+
 void PrismaUIManager::SetTextInputFocus(bool focused) {
     SKSE::log::info("Setting text input focus: {}", focused);
     auto controlMap = RE::ControlMap::GetSingleton();
@@ -53,6 +116,44 @@ void PrismaUIManager::SetTextInputFocus(bool focused) {
         isTextInputFocused = false;
         SKSE::log::info("Text input unfocused: restoring game hotkeys");
     }
+}
+
+RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
+    const RE::MenuOpenCloseEvent* a_event,
+    RE::BSTEventSource<RE::MenuOpenCloseEvent>* /*a_source*/)
+{
+    if (!a_event) return RE::BSEventNotifyControl::kContinue;
+
+    // Only hide for menus listed in Settings::trackedMenus
+    const auto& trackedMenus = Settings::GetSingleton()->trackedMenus;
+    bool tracked = std::any_of(trackedMenus.begin(), trackedMenus.end(),
+        [&](const std::string& name) { return a_event->menuName == std::string_view(name); });
+
+    if (!tracked) return RE::BSEventNotifyControl::kContinue;
+
+    if (a_event->opening) {
+        openMenuCount++;
+    } else {
+        if (openMenuCount > 0) openMenuCount--;
+    }
+
+    SKSE::log::info("MenuOpenCloseEvent: menu={}, opening={}, openMenuCount={}",
+        a_event->menuName.c_str(), a_event->opening, openMenuCount);
+
+    if (openMenuCount > 0 && !hiddenByMenu) {
+        SKSE::log::info("Menu opened — hiding PrismaUI");
+        hiddenByMenu = true;
+        ApplyVisibility();
+    } else if (openMenuCount == 0 && hiddenByMenu) {
+        SKSE::log::info("All menus closed — showing PrismaUI");
+        hiddenByMenu = false;
+        // Give a fresh idle window after returning from a menu
+        hiddenByIdle = false;
+        ResetIdleTimer();
+        ApplyVisibility();
+    }
+
+    return RE::BSEventNotifyControl::kContinue;
 }
 
 RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_event, RE::BSTEventSource<RE::InputEvent*>* a_source) {
@@ -123,7 +224,22 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             // Hardcoded keys not in OStim KeyData
             constexpr uint32_t KEY_ESCAPE = 0x01;
             constexpr uint32_t KEY_TAB    = 0x0F;
-            constexpr uint32_t KEY_TILDE  = 0x29;
+
+            // Check if this is an OStim-bound key — if so, count it as activity
+            if (button->IsDown()) {
+                const std::initializer_list<uint32_t> ostimKeys = {
+                    (uint32_t)cachedKeys.keyUp,   (uint32_t)cachedKeys.keyDown,
+                    (uint32_t)cachedKeys.keyLeft,  (uint32_t)cachedKeys.keyRight,
+                    (uint32_t)cachedKeys.keyYes,   (uint32_t)cachedKeys.keyEnd,
+                    (uint32_t)cachedKeys.keyToggle,(uint32_t)cachedKeys.keySearch,
+                    (uint32_t)cachedKeys.keyAlignment,(uint32_t)cachedKeys.keyHideUI,
+                    (uint32_t)cachedKeys.keySpeedUp,(uint32_t)cachedKeys.keySpeedDown,
+                    KEY_ESCAPE, KEY_TAB,
+                };
+                if (std::find(ostimKeys.begin(), ostimKeys.end(), key) != ostimKeys.end()) {
+                    ResetIdleTimer();
+                }
+            }
 
             // Directional/Yes keys: use handleControlStart/End for hold-to-repeat
             const char* controlStr = nullptr;
@@ -136,13 +252,14 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             else if (key == (uint32_t)cachedKeys.keyEnd)    controlStr = "no";
             else if (key == (uint32_t)cachedKeys.keyHideUI) {
                 if (button->IsDown()) {
-                    if (prismaUI->IsHidden(view)) {
-                        SKSE::log::info("Showing UI");
-                        prismaUI->Show(view);
-                    } else {
-                        SKSE::log::info("Hiding UI");
-                        prismaUI->Hide(view);
+                    hiddenByUser = !hiddenByUser;
+                    if (!hiddenByUser) {
+                        // User is un-hiding: clear idle state and give a fresh window
+                        hiddenByIdle = false;
+                        ResetIdleTimer();
                     }
+                    SKSE::log::info("keyHideUI toggled: hiddenByUser={}", hiddenByUser);
+                    ApplyVisibility();
                 }
             } else if (key == (uint32_t)cachedKeys.keySearch) {
                 if (button->IsDown()) {
@@ -157,18 +274,6 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             }
             else if (key == KEY_ESCAPE) controlStr = "esc";
             else if (key == KEY_TAB)    controlStr = "tab";
-            else if (key == KEY_TILDE)  {
-                if (button->IsDown()) {
-                    if (prismaUI->IsHidden(view)) {
-                        SKSE::log::info("Showing UI");
-                        prismaUI->Show(view);
-                    } else {
-                        SKSE::log::info("Hiding UI");
-                        prismaUI->Hide(view);
-                    }
-                }
-                controlStr = "tilde";
-            }
 
             if (controlStr) {
                 if (button->IsDown()) {
@@ -198,6 +303,8 @@ void PrismaUIManager::Initialize() {
     prismaUI = static_cast<PRISMA_UI_API::IVPrismaUI1*>(api);
     initialized = true;
     SKSE::log::info("PrismaUI initialized successfully for OStim Prism");
+    StartListeningModEvents();
+    StartListeningMenuEvents();
 }
 
 void PrismaUIManager::Show() {
@@ -256,6 +363,11 @@ void PrismaUIManager::Destroy() {
     PrismaView viewToDestroy = view;
     view = 0; // Mark as invalid immediately
     inspectorCreated = false;
+    openMenuCount = 0;
+    hiddenByMenu = false;
+    hiddenByUser = false;
+    hiddenByIdle = false;
+    lastActivityTime.store(0);
 
     SKSE::GetTaskInterface()->AddTask([this, viewToDestroy]() {
         if (prismaUI && prismaUI->IsValid(viewToDestroy)) {
@@ -307,6 +419,42 @@ void PrismaUIManager::StopPolling() {
     SKSE::log::info("Stopped polling for excitement updates");
 }
 
+void PrismaUIManager::ResetIdleTimer() {
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+    lastActivityTime.store(std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+}
+
+void PrismaUIManager::ApplyVisibility() {
+    if (!IsViewValid()) return;
+    bool shouldHide = hiddenByMenu || hiddenByUser || hiddenByIdle;
+    if (shouldHide) {
+        prismaUI->Hide(view);
+    } else {
+        prismaUI->Show(view);
+    }
+}
+
+void PrismaUIManager::CheckIdleTimeout() {
+    // Don't accumulate idle state while a menu is open or the user has explicitly hidden the UI
+    if (!IsViewValid() || hiddenByMenu || hiddenByUser) return;
+
+    auto now = std::chrono::steady_clock::now().time_since_epoch();
+    int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    int64_t lastMs = lastActivityTime.load();
+    int64_t idleMs = nowMs - lastMs;
+
+    int64_t idleTimeoutMs = static_cast<int64_t>(Settings::GetSingleton()->idleTimeoutSec) * 1000;
+    if (idleTimeoutMs > 0 && idleMs >= idleTimeoutMs && !hiddenByIdle) {
+        SKSE::log::info("UI idle for {}ms — hiding PrismaUI", idleMs);
+        hiddenByIdle = true;
+        ApplyVisibility();
+    } else if (idleMs < idleTimeoutMs && hiddenByIdle) {
+        SKSE::log::info("Activity detected — showing PrismaUI after idle");
+        hiddenByIdle = false;
+        ApplyVisibility();
+    }
+}
+
 void PrismaUIManager::PollUpdate() {
     // Check polling flag first
     if (!isPolling) return;
@@ -318,6 +466,7 @@ void PrismaUIManager::PollUpdate() {
     }
 
     UpdateExcitements();
+    CheckIdleTimeout();
 
     // Sleep in a background thread to avoid blocking the main game loop
     std::thread([this]() {
@@ -404,8 +553,8 @@ void PrismaUIManager::UpdateExcitements() {
             {"additionalProgress", actor.additionalProgress}
         });
 
-        // SKSE::log::info("Actor {}: excitement={}, stamina={}%, gender={}",
-        //    actor.name, actor.excitementProgress, actor.staminaProgress, actor.gender);
+        SKSE::log::info("Actor {}: excitement={}, stamina={}%, gender={}",
+           actor.name, actor.excitementProgress, actor.staminaProgress, actor.gender);
     }
 
     std::string script = "updateExcitements(" + actorsJson.dump() + ")";
@@ -597,7 +746,8 @@ void PrismaUIManager::OnDomReady(PrismaView view) {
     std::string gameReadyScript = "setGameReady()";
     manager->prismaUI->Invoke(view, gameReadyScript.c_str());
 
-    // Start listening for input
+    // Start listening for input and seed the idle timer so the 30s window starts now
+    manager->ResetIdleTimer();
     manager->StartListeningInput();
 }
 

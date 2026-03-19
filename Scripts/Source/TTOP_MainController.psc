@@ -33,6 +33,7 @@ EndFunction
 Event OnUpdate()
     if(OThread.IsRunning(0))
         UpdateActors()
+        RegisterForSingleUpdate(5)
     endif
 EndEvent
 
@@ -40,7 +41,6 @@ Event OCumFire(string eventName, string strArg, float numArg, Form sender)
 	Actor orgasmer = sender as Actor
     MiscUtil.PrintConsole("TTOP: OCumFire event received for actor " + orgasmer.GetDisplayName() + " with numArg " + numArg * 100)
     OStimPrism_API.SetActorAdditionalProgress(orgasmer, numArg * 100)
-    
 EndEvent
 
 Event OStimStart(string eventName, string strArg, float numArg, Form sender)
@@ -48,6 +48,7 @@ Event OStimStart(string eventName, string strArg, float numArg, Form sender)
     if(ThreadID != 0)
         return
     endif
+    RegisterForSingleUpdate(0.1)
     UpdateActors()
 EndEvent
 

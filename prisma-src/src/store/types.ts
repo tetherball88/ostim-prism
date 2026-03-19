@@ -73,6 +73,8 @@ export interface AlignmentSlice {
 export interface ActorStatsSlice {
     actorsState: ActorStats[];
     updateActorsState: (actorsState: ActorStats[]) => void;
+    orgasmPinnedUntil: number[];
+    pinActorOrgasm: (index: number) => void;
 }
 
 export interface ThreadStatusSlice {

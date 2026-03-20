@@ -72,6 +72,7 @@ SKSEPluginLoad(const LoadInterface* skse) {
                 switch (message->type) {
                     case SKSE::MessagingInterface::kPreLoadGame:
                         SKSE::log::info("PreLoadGame...");
+                        PrismaUIManager::GetSingleton()->Destroy();
                         break;
 
                     case SKSE::MessagingInterface::kPostLoadGame:

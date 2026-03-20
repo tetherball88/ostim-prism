@@ -16,6 +16,9 @@ Function Maintenance()
         OCum = Game.GetFormFromFile(0x800, "OCum.esp") as OCumScript
     endif
 
+    ; disable native OCum bar
+    UI.SetBool(OCum.CumBar.HUD_MENU, OCum.CumBar.WidgetRoot + "._visible", false)
+
     ; disable stamina bars from OEndurance if it's present to avoid conflicts with the OStim Prism bars
     if(Game.GetModByName("OEndurance.esp") != 255)
         OEnduranceLibs OELibs = Game.GetFormFromFile(0x2d68, "OEndurance.esp") as OEnduranceLibs
@@ -31,6 +34,7 @@ Function Maintenance()
 EndFunction
 
 Event OnUpdate()
+    MiscUtil.PrintConsole("TTOP: OnUpdate event fired")
     if(OThread.IsRunning(0))
         UpdateActors()
         RegisterForSingleUpdate(5)

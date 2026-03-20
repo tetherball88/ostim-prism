@@ -553,8 +553,8 @@ void PrismaUIManager::UpdateExcitements() {
             {"additionalProgress", actor.additionalProgress}
         });
 
-        SKSE::log::info("Actor {}: excitement={}, stamina={}%, gender={}",
-           actor.name, actor.excitementProgress, actor.staminaProgress, actor.gender);
+        // SKSE::log::info("Actor {}: excitement={}, stamina={}%, gender={}",
+        //    actor.name, actor.excitementProgress, actor.staminaProgress, actor.gender);
     }
 
     std::string script = "updateExcitements(" + actorsJson.dump() + ")";

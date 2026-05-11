@@ -19,7 +19,7 @@ function App() {
   useControls();
 
   const inGame = isInGame();
-  const style: CSSProperties = !inGame ? { backgroundImage: 'url("./ScreenShot183.png")' } : {};
+  const style: CSSProperties = !inGame ? { backgroundImage: 'url("./assets/background.jpg")' } : {};
 
   return (
     <div className={`ui-container ${focusBlock === 'buttons' ? 'focus-buttons' : 'focus-menu'}`} style={style}>

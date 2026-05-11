@@ -18,6 +18,7 @@ interface ListProps {
 
 export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, selectOption }) => {
   const [visibleCount, setVisibleCount] = useState(5); // will be calculated
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
 
   // Compute actual pixel height based on container's font-size
@@ -45,6 +46,10 @@ export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, 
     }
     return () => observer.disconnect();
   }, [updateVisibleCount]);
+
+  useEffect(() => {
+    setHoverIndex(null);
+  }, [activeIndex]);
 
   const centerPosition = Math.floor(visibleCount / 2);
 
@@ -84,6 +89,7 @@ export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, 
   };
 
   const { containerTransform, selectorPosition } = getScrollPositions();
+  const renderedIndex = hoverIndex ?? activeIndex;
 
   return (
     <>
@@ -105,12 +111,18 @@ export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, 
             return (
               <div
                 key={opt.id + opt.description + opt.iconPath}
-                className={`list-item ${originalIndex === activeIndex ? 'active' : ''}`}
+                className={`list-item ${originalIndex === renderedIndex ? 'active' : ''}`}
                 onMouseEnter={() => {
                   if (Date.now() - useOStimStore.getState().navigatingAt < HOVER_SUPPRESS_MS) return;
-                  setListActiveIndex(originalIndex);
+                  setHoverIndex(originalIndex);
                 }}
-                onClick={() => selectOption(originalIndex)}
+                onMouseLeave={() => {
+                  setHoverIndex(null);
+                }}
+                onClick={() => {
+                  setListActiveIndex(originalIndex);
+                  selectOption(originalIndex);
+                }}
               >
                 <Icon base64Data={opt.iconData} path={opt.iconPath} size="var(--control-buttons-size)" />
                 <p className="list-label">{opt.description}</p>

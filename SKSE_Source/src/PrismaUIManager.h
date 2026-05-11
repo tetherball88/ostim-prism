@@ -38,6 +38,7 @@ public:
     RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) override;
 
     static void OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, uint32_t threadID, void* userData);
+    static void OnAllowedKeyEvent(uint32_t key, bool isDown);
 
     static constexpr uint32_t INVALID_THREAD_ID = 0xFFFFFFFF;
 
@@ -57,6 +58,7 @@ private:
     std::atomic<int64_t> lastActivityTime{0};
     bool inspectorCreated = false;
     bool isTextInputFocused = false;
+    bool isKeyboardBlockingIntended = false;
     OStimDataProvider::KeyData cachedKeys{};
     bool hasCachedKeys = false;
     

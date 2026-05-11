@@ -89,6 +89,19 @@ export function setupGameIntegration(store: StoreState) {
 
     let repeatTimer: ReturnType<typeof setTimeout> | null = null;
     let repeatInterval: ReturnType<typeof setInterval> | null = null;
+    let activeHoldControl: string | null = null;
+
+    const stopRepeat = () => {
+        if (repeatTimer) {
+            clearTimeout(repeatTimer);
+            repeatTimer = null;
+        }
+        if (repeatInterval) {
+            clearInterval(repeatInterval);
+            repeatInterval = null;
+        }
+        activeHoldControl = null;
+    };
 
     window.handleControlStart = (control: string) => {
         const recentStore = useOStimStore.getState()
@@ -106,21 +119,39 @@ export function setupGameIntegration(store: StoreState) {
             }
         }
         if (shouldListenToHold) {
-            if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
-            if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+            // Ignore duplicate key-start events while the same hold is already active.
+            if (activeHoldControl === lowerCaseControl) {
+                return;
+            }
+
+            stopRepeat();
+            activeHoldControl = lowerCaseControl;
             store.handleControlInput(control);
             repeatTimer = setTimeout(() => {
-                repeatInterval = setInterval(() => store.handleControlInput(control), 50);
+                repeatInterval = setInterval(() => {
+                    if (activeHoldControl !== lowerCaseControl) {
+                        return;
+                    }
+                    store.handleControlInput(control);
+                }, 50);
             }, 400);
         } else {
+            stopRepeat();
             store.handleControlInput(control);
         }
     };
 
     window.handleControlEnd = () => {
-        if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
-        if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+        stopRepeat();
     };
+
+    // Defensive cleanup in case key-up is missed while focus/visibility changes.
+    window.addEventListener('blur', stopRepeat);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopRepeat();
+        }
+    });
 
     window.setGameReady = () => {
         console.log("Game signaled it's ready");

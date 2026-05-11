@@ -8,6 +8,7 @@
 #include "src/PrismaUIManager.h"
 #include "src/Settings.h"
 #include "src/Papyrus.h"
+#include "src/KeyboardInputBlocker.h"
 
 using namespace SKSE;
 
@@ -44,7 +45,6 @@ namespace {
         logger->set_pattern("[%H:%M:%S] [%l] %v");
 
         spdlog::set_default_logger(std::move(logger));
-        spdlog::info("Logging to {}", logPath.string());
     }
 
     void PrintToConsole(std::string_view message) {
@@ -73,6 +73,11 @@ SKSEPluginLoad(const LoadInterface* skse) {
                     case SKSE::MessagingInterface::kPreLoadGame:
                         SKSE::log::info("PreLoadGame...");
                         PrismaUIManager::GetSingleton()->Destroy();
+                        break;
+
+                    case SKSE::MessagingInterface::kInputLoaded:
+                        SKSE::log::info("Input loaded — installing keyboard blocker hook...");
+                        KeyboardInputBlocker::Install();
                         break;
 
                     case SKSE::MessagingInterface::kPostLoadGame:

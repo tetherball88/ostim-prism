@@ -1,4 +1,5 @@
 #include "PrismaUIManager.h"
+#include "KeyboardInputBlocker.h"
 #include "Settings.h"
 #include <thread>
 #include <chrono>
@@ -143,10 +144,18 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
     if (openMenuCount > 0 && !hiddenByMenu) {
         SKSE::log::info("Menu opened — hiding PrismaUI");
         hiddenByMenu = true;
+        if (isKeyboardBlockingIntended) {
+            KeyboardInputBlocker::SetBlocking(false);
+            SKSE::log::info("Menu opened — suspending keyboard blocker");
+        }
         ApplyVisibility();
     } else if (openMenuCount == 0 && hiddenByMenu) {
         SKSE::log::info("All menus closed — showing PrismaUI");
         hiddenByMenu = false;
+        if (isKeyboardBlockingIntended) {
+            KeyboardInputBlocker::SetBlocking(true);
+            SKSE::log::info("All menus closed — resuming keyboard blocker");
+        }
         // Give a fresh idle window after returning from a menu
         hiddenByIdle = false;
         ResetIdleTimer();
@@ -219,7 +228,7 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             }
         }
         // All OStim key bindings are handled here in ProcessEvent.
-        if (hasCachedKeys && IsViewValid()) {
+        if (hasCachedKeys && IsViewValid() && openMenuCount == 0) {
 
             // Hardcoded keys not in OStim KeyData
             constexpr uint32_t KEY_ESCAPE = 0x01;
@@ -350,6 +359,9 @@ void PrismaUIManager::Destroy() {
     // Ensure text input mode is released if a field was focused when destroyed
     SetTextInputFocus(false);
 
+    // Ensure keyboard blocking is disabled when the UI is destroyed
+    KeyboardInputBlocker::SetBlocking(false);
+
     // Hide immediately
     if (prismaUI->IsValid(view)) {
         prismaUI->Unfocus(view);
@@ -367,6 +379,7 @@ void PrismaUIManager::Destroy() {
     hiddenByMenu = false;
     hiddenByUser = false;
     hiddenByIdle = false;
+    isKeyboardBlockingIntended = false;
     lastActivityTime.store(0);
 
     SKSE::GetTaskInterface()->AddTask([this, viewToDestroy]() {
@@ -495,6 +508,26 @@ void PrismaUIManager::UpdateKeys()
     auto keys = dataProvider->GetKeyData();
     cachedKeys = keys;
     hasCachedKeys = true;
+
+    // Keep the allowed-key list in sync so blocking passes OStim nav keys through.
+    {
+        constexpr uint32_t KEY_ESCAPE = 0x01;
+        constexpr uint32_t KEY_TAB    = 0x0F;
+        std::vector<uint32_t> allowed = {
+            (uint32_t)keys.keyUp,    (uint32_t)keys.keyDown,
+            (uint32_t)keys.keyLeft,  (uint32_t)keys.keyRight,
+            (uint32_t)keys.keyYes,   (uint32_t)keys.keyEnd,
+            (uint32_t)keys.keyToggle,(uint32_t)keys.keySearch,
+            (uint32_t)keys.keyAlignment, (uint32_t)keys.keyHideUI,
+            (uint32_t)keys.keySpeedUp,   (uint32_t)keys.keySpeedDown,
+            KEY_ESCAPE, KEY_TAB,
+        };
+        for (uint32_t k : Settings::GetSingleton()->toggleFocusKeys) {
+            allowed.push_back(k);
+        }
+        KeyboardInputBlocker::SetAllowedKeys(std::move(allowed));
+        KeyboardInputBlocker::SetKeyHandler(&PrismaUIManager::OnAllowedKeyEvent);
+    }
 
     json j = {        
         {"keyUp", keys.keyUp},
@@ -722,6 +755,72 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
                 break;
         }
     });
+}
+
+void PrismaUIManager::OnAllowedKeyEvent(uint32_t key, bool isDown) {
+    auto manager = GetSingleton();
+    if (!manager || !manager->IsViewValid()) return;
+
+    // Toggle focus key
+    auto& focusKeys = Settings::GetSingleton()->toggleFocusKeys;
+    if (isDown && std::find(focusKeys.begin(), focusKeys.end(), key) != focusKeys.end()) {
+        if (manager->prismaUI->HasFocus(manager->view)) {
+            manager->prismaUI->Unfocus(manager->view);
+        } else {
+            manager->prismaUI->Focus(manager->view);
+        }
+        return;
+    }
+
+    if (!manager->hasCachedKeys) return;
+
+    constexpr uint32_t KEY_ESCAPE = 0x01;
+    constexpr uint32_t KEY_TAB    = 0x0F;
+
+    if (isDown) manager->ResetIdleTimer();
+
+    if (key == (uint32_t)manager->cachedKeys.keyHideUI) {
+        if (isDown) {
+            manager->hiddenByUser = !manager->hiddenByUser;
+            if (!manager->hiddenByUser) {
+                manager->hiddenByIdle = false;
+                manager->ResetIdleTimer();
+            }
+            SKSE::log::info("keyHideUI toggled via blocker: hiddenByUser={}", manager->hiddenByUser);
+            manager->ApplyVisibility();
+        }
+        return;
+    }
+
+    // if (key == (uint32_t)manager->cachedKeys.keySearch) {
+    //     if (isDown) manager->prismaUI->Invoke(manager->view, "showMenu('searchMenu')");
+    //     return;
+    // }
+
+    // if (key == (uint32_t)manager->cachedKeys.keyAlignment) {
+    //     if (isDown) manager->prismaUI->Invoke(manager->view, "showMenu('alignMenu')");
+    //     return;
+    // }
+
+    const char* controlStr = nullptr;
+    if      (key == (uint32_t)manager->cachedKeys.keyUp)     controlStr = "up";
+    else if (key == (uint32_t)manager->cachedKeys.keyDown)   controlStr = "down";
+    else if (key == (uint32_t)manager->cachedKeys.keyLeft)   controlStr = "left";
+    else if (key == (uint32_t)manager->cachedKeys.keyRight)  controlStr = "right";
+    else if (key == (uint32_t)manager->cachedKeys.keyYes)    controlStr = "yes";
+    else if (key == (uint32_t)manager->cachedKeys.keyToggle) controlStr = "toggle";
+    else if (key == (uint32_t)manager->cachedKeys.keyEnd)    controlStr = "no";
+    else if (key == KEY_ESCAPE)                              controlStr = "esc";
+    else if (key == KEY_TAB)                                 controlStr = "tab";
+
+    if (controlStr) {
+        if (isDown) {
+            std::string script = "handleControlStart('" + std::string(controlStr) + "')";
+            manager->prismaUI->Invoke(manager->view, script.c_str());
+        } else {
+            manager->prismaUI->Invoke(manager->view, "handleControlEnd()");
+        }
+    }
 }
 
 void PrismaUIManager::OnDomReady(PrismaView view) {
@@ -993,6 +1092,8 @@ void PrismaUIManager::OnAction(const char* data) {
         } else if (action == "setTextInputFocus") {
             auto payload = actionData.value("payload", json::object());
             bool focused = payload.value("focused", false);
+            manager->isKeyboardBlockingIntended = focused;
+            KeyboardInputBlocker::SetBlocking(focused && manager->openMenuCount == 0);
             SKSE::GetTaskInterface()->AddTask([manager, focused]() {
                 manager->SetTextInputFocus(focused);
             });

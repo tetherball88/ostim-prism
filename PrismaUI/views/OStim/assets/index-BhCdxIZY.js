@@ -8245,6 +8245,7 @@
   const ITEM_HEIGHT_EM = 4;
   const List = ({ options, activeIndex, setListActiveIndex, selectOption }) => {
     const [visibleCount, setVisibleCount] = reactExports.useState(5);
+    const [hoverIndex, setHoverIndex] = reactExports.useState(null);
     const windowRef = reactExports.useRef(null);
     const getItemHeight = () => {
       if (!windowRef.current) return 64;
@@ -8266,6 +8267,9 @@
       }
       return () => observer.disconnect();
     }, [updateVisibleCount]);
+    reactExports.useEffect(() => {
+      setHoverIndex(null);
+    }, [activeIndex]);
     const centerPosition = Math.floor(visibleCount / 2);
     const reversedOptions = [...options].reverse();
     const getVisualIndex = (idx) => options.length - 1 - idx;
@@ -8284,6 +8288,7 @@
       };
     };
     const { containerTransform, selectorPosition } = getScrollPositions();
+    const renderedIndex = hoverIndex ?? activeIndex;
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       options.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-count", children: [
         activeIndex + 1,
@@ -8303,12 +8308,18 @@
           return /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
             {
-              className: `list-item ${originalIndex === activeIndex ? "active" : ""}`,
+              className: `list-item ${originalIndex === renderedIndex ? "active" : ""}`,
               onMouseEnter: () => {
                 if (Date.now() - useOStimStore.getState().navigatingAt < HOVER_SUPPRESS_MS) return;
-                setListActiveIndex(originalIndex);
+                setHoverIndex(originalIndex);
               },
-              onClick: () => selectOption(originalIndex),
+              onMouseLeave: () => {
+                setHoverIndex(null);
+              },
+              onClick: () => {
+                setListActiveIndex(originalIndex);
+                selectOption(originalIndex);
+              },
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { base64Data: opt.iconData, path: opt.iconPath, size: "var(--control-buttons-size)" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "list-label", children: opt.description })
@@ -8978,6 +8989,18 @@
     };
     let repeatTimer = null;
     let repeatInterval = null;
+    let activeHoldControl = null;
+    const stopRepeat = () => {
+      if (repeatTimer) {
+        clearTimeout(repeatTimer);
+        repeatTimer = null;
+      }
+      if (repeatInterval) {
+        clearInterval(repeatInterval);
+        repeatInterval = null;
+      }
+      activeHoldControl = null;
+    };
     window.handleControlStart = (control) => {
       const recentStore = useOStimStore.getState();
       const lowerCaseControl = control.toLowerCase();
@@ -8993,32 +9016,34 @@
         }
       }
       if (shouldListenToHold) {
-        if (repeatTimer) {
-          clearTimeout(repeatTimer);
-          repeatTimer = null;
+        if (activeHoldControl === lowerCaseControl) {
+          return;
         }
-        if (repeatInterval) {
-          clearInterval(repeatInterval);
-          repeatInterval = null;
-        }
+        stopRepeat();
+        activeHoldControl = lowerCaseControl;
         store2.handleControlInput(control);
         repeatTimer = setTimeout(() => {
-          repeatInterval = setInterval(() => store2.handleControlInput(control), 50);
+          repeatInterval = setInterval(() => {
+            if (activeHoldControl !== lowerCaseControl) {
+              return;
+            }
+            store2.handleControlInput(control);
+          }, 50);
         }, 400);
       } else {
+        stopRepeat();
         store2.handleControlInput(control);
       }
     };
     window.handleControlEnd = () => {
-      if (repeatTimer) {
-        clearTimeout(repeatTimer);
-        repeatTimer = null;
-      }
-      if (repeatInterval) {
-        clearInterval(repeatInterval);
-        repeatInterval = null;
-      }
+      stopRepeat();
     };
+    window.addEventListener("blur", stopRepeat);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopRepeat();
+      }
+    });
     window.setGameReady = () => {
       console.log("Game signaled it's ready");
       store2.setGameReady();

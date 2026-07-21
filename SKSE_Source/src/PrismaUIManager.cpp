@@ -1008,7 +1008,8 @@ void PrismaUIManager::OnAction(const char* data) {
             }
         } else if (action == "alignmentInit") {
             auto payload = actionData.value("payload", json::object());
-            uint32_t actorIndex = payload.value("actorIndex", 0u);
+            uint32_t actorIndex = (payload.contains("actorIndex") && !payload["actorIndex"].is_null() && payload["actorIndex"].is_number()) 
+                ? payload["actorIndex"].get<uint32_t>() : 0u;
 
             uint32_t threadID = dataProvider->GetCurrentThreadID();
             if (threadID == 0) {
@@ -1018,7 +1019,8 @@ void PrismaUIManager::OnAction(const char* data) {
             }
         } else if (action == "alignmentSelectActor") {
             auto payload = actionData.value("payload", json::object());
-            uint32_t actorIndex = payload.value("actorIndex", 0u);
+            uint32_t actorIndex = (payload.contains("actorIndex") && !payload["actorIndex"].is_null() && payload["actorIndex"].is_number()) 
+                ? payload["actorIndex"].get<uint32_t>() : 0u;
 
             uint32_t threadID = dataProvider->GetCurrentThreadID();
             if (threadID == 0) {
@@ -1028,9 +1030,10 @@ void PrismaUIManager::OnAction(const char* data) {
             }
         } else if (action == "alignmentSet") {
             auto payload = actionData.value("payload", json::object());
-            uint32_t actorIndex = payload.value("actorIndex", 0u);
-            std::string field = payload.value("field", "");
-            float value = payload.value("value", 0.0f);
+            uint32_t actorIndex = (payload.contains("actorIndex") && !payload["actorIndex"].is_null() && payload["actorIndex"].is_number()) 
+                ? payload["actorIndex"].get<uint32_t>() : 0u;
+            std::string field = (payload.contains("field") && payload["field"].is_string()) ? payload["field"].get<std::string>() : "";
+            float value = (payload.contains("value") && payload["value"].is_number()) ? payload["value"].get<float>() : 0.0f;
 
             if (field.empty()) {
                 SKSE::log::warn("alignmentSet missing field");
@@ -1068,7 +1071,7 @@ void PrismaUIManager::OnAction(const char* data) {
             // sendAlignmentUpdate(threadID, actorIndex);
         } else if (action == "setSpeed") {
             auto payload = actionData.value("payload", json::object());
-            int32_t speed = payload.value("speed", 1);
+            int32_t speed = (payload.contains("speed") && payload["speed"].is_number()) ? payload["speed"].get<int32_t>() : 1;
 
             uint32_t threadID = dataProvider->GetCurrentThreadID();
             if (threadID == 0) {
@@ -1081,7 +1084,7 @@ void PrismaUIManager::OnAction(const char* data) {
             }
         } else if (action == "focus") {
             auto payload = actionData.value("payload", json::object());
-            bool shouldFocus = payload.value("shouldFocus", false);
+            bool shouldFocus = (payload.contains("shouldFocus") && payload["shouldFocus"].is_boolean()) ? payload["shouldFocus"].get<bool>() : false;
             if (manager->prismaUI && manager->view) {
                 if (shouldFocus) {
                     manager->prismaUI->Focus(manager->view);
@@ -1091,7 +1094,7 @@ void PrismaUIManager::OnAction(const char* data) {
             }
         } else if (action == "setTextInputFocus") {
             auto payload = actionData.value("payload", json::object());
-            bool focused = payload.value("focused", false);
+            bool focused = (payload.contains("focused") && payload["focused"].is_boolean()) ? payload["focused"].get<bool>() : false;
             manager->isKeyboardBlockingIntended = focused;
             KeyboardInputBlocker::SetBlocking(focused && manager->openMenuCount == 0);
             SKSE::GetTaskInterface()->AddTask([manager, focused]() {
@@ -1100,7 +1103,7 @@ void PrismaUIManager::OnAction(const char* data) {
         } else {
             SKSE::log::warn("PrismaUI unknown action: {}", action);
         }
-    } catch (const json::parse_error& e) {
-        SKSE::log::error("PrismaUI failed to parse action JSON: {}", e.what());
+    } catch (const std::exception& e) {
+        SKSE::log::error("PrismaUI exception handling action JSON: {}", e.what());
     }
 }

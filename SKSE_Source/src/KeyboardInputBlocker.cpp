@@ -17,7 +17,7 @@ namespace KeyboardInputBlocker {
 
         // Fully drains the DInput buffer and zeroes device state.
         static void FlushKeyboard(RE::BSWin32KeyboardDevice* device) {
-            auto* inputDevice = reinterpret_cast<REX::W32::IDirectInputDevice8A*>(device->dInputDevice);
+            auto* inputDevice = reinterpret_cast<REX::W32::IDirectInputDevice8A*>(device->GetRuntimeData().dInputDevice);
             if (!inputDevice) return;
 
             if (!REX::W32::SUCCESS(inputDevice->Acquire())) return;
@@ -30,12 +30,12 @@ namespace KeyboardInputBlocker {
                 if (inputDevice->GetDeviceData(sizeof(REX::W32::DIDEVICEOBJECTDATA), buf, &count, 0) != 0) break;
             }
 
-            device->Reset();
+            device->ClearInputState();
         }
 
         static void KeyboardProcessHook(RE::BSWin32KeyboardDevice* device, float timeDelta) {
             if (g_blocking && device) {
-                auto* inputDevice = reinterpret_cast<REX::W32::IDirectInputDevice8A*>(device->dInputDevice);
+                auto* inputDevice = reinterpret_cast<REX::W32::IDirectInputDevice8A*>(device->GetRuntimeData().dInputDevice);
 
                 // Snapshot current hardware state before draining.
                 uint8_t rawState[256] = {};

@@ -20,7 +20,7 @@ BEGIN
 			VALUE "FileDescription", "OStimPrism"
 			VALUE "FileVersion", "0.0.1.0"
 			VALUE "InternalName", "OStimPrism"
-			VALUE "LegalCopyright", "MIT License"
+			VALUE "LegalCopyright", "Copyright (c) tetherball88. All Rights Reserved."
 			VALUE "ProductName", "OStimPrism"
 			VALUE "ProductVersion", "0.0.1.0"
 		END

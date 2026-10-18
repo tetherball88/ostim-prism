@@ -119,3 +119,15 @@ WARNING. Some SKS plugins use hotkeys. Neither vanilla OStim menus nor OStim Pri
 - `down` - moves down selected active found search results 
 - `yes` - selects current search item and warps your animation to selected scene
 - `left` - changes focus from `Main Menu` to `Control buttons`
+
+---
+
+## License & Permissions 📜⚖️
+
+**Copyright © 2025–2026 tetherball88. All Rights Reserved** *(Source-Available — see [LICENSE](LICENSE) for full terms).*
+
+- ✅ **Contributions Welcome:** You are welcome and encouraged to fork this repository on GitHub, inspect the code, and submit **Pull Requests** or bug reports.
+- ✅ **Patches & Third-Party Integrations:** You may freely create and publish compatibility patches, INI configs, and add-on mods that require the official OStim Prism release as a dependency. The public interop file (`Scripts/Source/OStimPrism_API.psc`) is explicitly provided under the **MIT License** so third-party mods can compile against it freely.
+- ✅ **Translations:** Community translations may be published as standalone translation patches that require the original OStim Prism mod and credit the original page.
+- ❌ **No Standalone Redistribution or Re-uploading:** You may **not** copy, repackage, re-upload, or publish OStim Prism (or modified standalone forks of its DLL, ESP, scripts, or Prisma UI) as your own mod on Nexus Mods or any other platform without explicit written permission from the author.
+

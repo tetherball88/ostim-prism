@@ -28,7 +28,7 @@ jobs:
           zip -r "out/OStimPrism_${TAG}.zip" \
             Scripts/ \
             SKSE/ \
-            PrismaUI/ \
+            Magelight/ \
             TT_OStimPrism.esp \
             -x ".github/*"
 

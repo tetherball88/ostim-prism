@@ -48,7 +48,7 @@
      *                         Default ~307px at 1920px wide. Raise (e.g. 20vw) to shift rings right.
      */
     --control-buttons-size: 4rem;
-    --hud-bottom: 14rem;          /* vertical anchor for panels & controls */
+    --hud-bottom: 16rem;          /* vertical anchor for panels & controls */
     --hud-left-edge: calc(1vw + var(--control-buttons-size) + 60px);       /* left panel / nav list left edge        */
     --hud-right-edge: 120px;      /* right panels (search / alignment)      */
     --hud-progress-left: 16vw;    /* progress rings — ~307px at 1920px      */

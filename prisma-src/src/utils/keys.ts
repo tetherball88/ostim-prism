@@ -79,4 +79,12 @@ export const numKeys = [
     //     key: 'Enter',
     //     keyCode: 13
     // }
-]
+];
+
+export const getNormalizedKeyCode = (e: KeyboardEvent): number => {
+    if (e.code) {
+        const matchedNum = numKeys.find(n => n.code === e.code);
+        if (matchedNum) return matchedNum.keyCode;
+    }
+    return e.keyCode;
+};

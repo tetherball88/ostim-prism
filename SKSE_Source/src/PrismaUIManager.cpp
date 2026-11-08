@@ -1,10 +1,10 @@
 #include "PrismaUIManager.h"
-#include "KeyboardInputBlocker.h"
 #include "Settings.h"
 #include <thread>
 #include <chrono>
 #include <Windows.h>
 #include <algorithm>
+#include <filesystem>
 
 namespace {
     void SetCrosshairTarget(bool hasTarget) {
@@ -15,6 +15,62 @@ namespace {
         RE::GFxValue args[6]{hasTarget, "", false, true, false, false};
         hudMenu->uiMovie->Invoke("_root.HUDMovieBaseInstance.SetCrosshairTarget", nullptr, args, 6);
     }
+
+    std::string GetPagePath() {
+        wchar_t buf[MAX_PATH]{};
+        GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        auto p = std::filesystem::path(buf).parent_path()
+               / L"Data" / L"Magelight" / L"OStimPrism" / L"views" / L"OStim" / L"index.html";
+        const auto u = p.u8string();
+        return std::string(reinterpret_cast<const char*>(u.data()), u.size());
+    }
+}
+
+bool PrismaUIManager::HasFocus() const {
+    if (hasUIMode.load()) return true;
+    return magelight && modId != 0 && magelight->GetUIModeOwner() == modId;
+}
+
+void PrismaUIManager::SetFocus(bool shouldFocus) {
+    if (!IsViewValid()) return;
+
+    if (shouldFocus) {
+        std::uint32_t flags = MAGELIGHT_API::kUIModeFlagNone;
+        if (magelight->hostVersionNumber >= 10100 && magelight->QueryCapability("uimodecancel") == 1) {
+            flags |= MAGELIGHT_API::kUIModeFlagReclaim;
+        }
+        auto res = magelight->RequestUIMode(view, flags);
+        if (res != MAGELIGHT_API::Result::Ok) {
+            SKSE::log::warn("Magelight RequestUIMode refused ({}): {}",
+                static_cast<int>(res), magelight->GetLastErrorMessage(modId));
+        }
+    } else {
+        if (magelight->hostVersionNumber >= 10100 && magelight->QueryCapability("uimodecancel") == 1) {
+            magelight->CancelUIModeRequest(modId);
+        }
+        magelight->ReleaseUIMode(modId);
+        hasUIMode.store(false);
+    }
+}
+
+void PrismaUIManager::ToggleInspector() {
+    if (!IsViewValid()) return;
+    if (magelight->hostVersionNumber >= 2800 && magelight->QueryCapability("inspector") == 1) {
+        bool visible = false;
+        magelight->IsInspectorVisible(view, &visible);
+        magelight->ShowInspector(view, !visible);
+    }
+}
+
+void PrismaUIManager::ToggleHideUI() {
+    hiddenByUser = !hiddenByUser;
+    if (!hiddenByUser) {
+        // User is un-hiding: clear idle state and give a fresh window
+        hiddenByIdle = false;
+        ResetIdleTimer();
+    }
+    SKSE::log::info("keyHideUI toggled: hiddenByUser={}", hiddenByUser);
+    ApplyVisibility();
 }
 
 void PrismaUIManager::StartListeningInput() {
@@ -82,7 +138,7 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
     RE::FormID actorID = a_event->sender->GetFormID();
     SKSE::log::info("Orgasm event received for actor {:08X}", actorID);
 
-    // Proxy the event to the Prisma UI — it owns the excitement display logic
+    // Proxy the event to the Magelight UI — it owns the excitement display logic
     SKSE::GetTaskInterface()->AddTask([this, actorID]() {
         if (!IsViewValid()) return;
 
@@ -93,30 +149,11 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
         }
 
         std::string script = "onActorOrgasm(" + std::to_string(actorIndex) + ")";
-        prismaUI->Invoke(view, script.c_str());
+        magelight->InvokeJS(view, script.c_str());
         SKSE::log::info("Proxied orgasm event to UI for actor index {}", actorIndex);
     });
 
     return RE::BSEventNotifyControl::kContinue;
-}
-
-void PrismaUIManager::SetTextInputFocus(bool focused) {
-    SKSE::log::info("Setting text input focus: {}", focused);
-    auto controlMap = RE::ControlMap::GetSingleton();
-    if (!controlMap) {
-        SKSE::log::error("ControlMap singleton not available");
-        return;
-    }
-
-    if (focused && !isTextInputFocused) {
-        controlMap->AllowTextInput(true);
-        isTextInputFocused = true;
-        SKSE::log::info("Text input focused: suppressing game hotkeys");
-    } else if (!focused && isTextInputFocused) {
-        controlMap->AllowTextInput(false);
-        isTextInputFocused = false;
-        SKSE::log::info("Text input unfocused: restoring game hotkeys");
-    }
 }
 
 RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
@@ -138,28 +175,21 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
         if (openMenuCount > 0) openMenuCount--;
     }
 
-    SKSE::log::info("MenuOpenCloseEvent: menu={}, opening={}, openMenuCount={}",
-        a_event->menuName.c_str(), a_event->opening, openMenuCount);
-
     if (openMenuCount > 0 && !hiddenByMenu) {
-        SKSE::log::info("Menu opened — hiding PrismaUI");
         hiddenByMenu = true;
-        if (isKeyboardBlockingIntended) {
-            KeyboardInputBlocker::SetBlocking(false);
-            SKSE::log::info("Menu opened — suspending keyboard blocker");
+        if (currentThreadID != INVALID_THREAD_ID) {
+            SKSE::log::info("Menu opened — hiding Magelight UI");
+            ApplyVisibility();
         }
-        ApplyVisibility();
     } else if (openMenuCount == 0 && hiddenByMenu) {
-        SKSE::log::info("All menus closed — showing PrismaUI");
         hiddenByMenu = false;
-        if (isKeyboardBlockingIntended) {
-            KeyboardInputBlocker::SetBlocking(true);
-            SKSE::log::info("All menus closed — resuming keyboard blocker");
+        if (currentThreadID != INVALID_THREAD_ID) {
+            SKSE::log::info("All menus closed — showing Magelight UI");
+            // Give a fresh idle window after returning from a menu
+            hiddenByIdle = false;
+            ResetIdleTimer();
+            ApplyVisibility();
         }
-        // Give a fresh idle window after returning from a menu
-        hiddenByIdle = false;
-        ResetIdleTimer();
-        ApplyVisibility();
     }
 
     return RE::BSEventNotifyControl::kContinue;
@@ -174,14 +204,15 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
     (void)a_source;
 
     if (!IsViewValid()) {
-        SKSE::log::warn("ProcessEvent called but PrismaUI view is not valid");
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    // While a text input field is focused, suppress all hotkey handling
-    // if (isTextInputFocused) {
-    //     return RE::BSEventNotifyControl::kContinue;
-    // }
+    // When the view holds Magelight UI mode, keyboard events are delivered directly
+    // to the web page (which handles them in useControls.ts) while Magelight mutes
+    // DirectInput and GetAsyncKeyState for other mods.
+    if (HasFocus()) {
+        return RE::BSEventNotifyControl::kContinue;
+    }
 
     for (auto event = *a_event; event; event = event->next) {
         if (event->GetEventType() != RE::INPUT_EVENT_TYPE::kButton) {
@@ -193,42 +224,35 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             continue;
         }
 
-        // Toggle Focus (Configurable)
         auto key = button->GetIDCode();
-        auto& focusKeys = Settings::GetSingleton()->toggleFocusKeys;
-        if (std::find(focusKeys.begin(), focusKeys.end(), key) != focusKeys.end()) {
-            if (button->IsDown()) {
-                if (prismaUI && view) {
-                    if (prismaUI->HasFocus(view)) {
-                        prismaUI->Unfocus(view);
-                    } else {
-                        prismaUI->Focus(view);
-                    }
-                } else {
-                     SKSE::log::warn("Focus key pressed but prismaUI or view is invalid.");
-                }
-            } 
+
+        // Ignore hotkeys while a tracked menu (e.g. Console) is open or no scene is active
+        if (currentThreadID == INVALID_THREAD_ID || openMenuCount > 0 || hiddenByMenu) {
+            continue;
         }
 
-        // Toggle Inspector (Configurable)
-        auto& inspectorKeys = Settings::GetSingleton()->toggleInspectorKeys;
-        if (std::find(inspectorKeys.begin(), inspectorKeys.end(), key) != inspectorKeys.end()) {
-            if (button->IsDown()) {
-                if (prismaUI && view) {
-                    if (!inspectorCreated) {
-                        prismaUI->CreateInspectorView(view);
-                        prismaUI->SetInspectorBounds(view, 100.0f, 100.0f, 800, 600);
-                        inspectorCreated = true;
-                    }
-                    bool visible = prismaUI->IsInspectorVisible(view);
-                    prismaUI->SetInspectorVisibility(view, !visible);
-                } else {
-                    SKSE::log::warn("Inspector key pressed but prismaUI or view is invalid.");
+        // Toggle Focus (Configurable) — only when not manually hidden by user
+        if (!hiddenByUser) {
+            auto& focusKeys = Settings::GetSingleton()->toggleFocusKeys;
+            if (std::find(focusKeys.begin(), focusKeys.end(), key) != focusKeys.end()) {
+                if (button->IsDown()) {
+                    ResetIdleTimer();
+                    SetFocus(!HasFocus());
+                }
+            }
+
+            // Toggle Inspector (Configurable)
+            auto& inspectorKeys = Settings::GetSingleton()->toggleInspectorKeys;
+            if (std::find(inspectorKeys.begin(), inspectorKeys.end(), key) != inspectorKeys.end()) {
+                if (button->IsDown()) {
+                    ResetIdleTimer();
+                    ToggleInspector();
                 }
             }
         }
-        // All OStim key bindings are handled here in ProcessEvent.
-        if (hasCachedKeys && IsViewValid() && openMenuCount == 0) {
+
+        // All OStim key bindings are handled here in ProcessEvent when unfocused.
+        if (hasCachedKeys && IsViewValid()) {
 
             // Hardcoded keys not in OStim KeyData
             constexpr uint32_t KEY_ESCAPE = 0x01;
@@ -261,24 +285,17 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             else if (key == (uint32_t)cachedKeys.keyEnd)    controlStr = "no";
             else if (key == (uint32_t)cachedKeys.keyHideUI) {
                 if (button->IsDown()) {
-                    hiddenByUser = !hiddenByUser;
-                    if (!hiddenByUser) {
-                        // User is un-hiding: clear idle state and give a fresh window
-                        hiddenByIdle = false;
-                        ResetIdleTimer();
-                    }
-                    SKSE::log::info("keyHideUI toggled: hiddenByUser={}", hiddenByUser);
-                    ApplyVisibility();
+                    ToggleHideUI();
                 }
             } else if (key == (uint32_t)cachedKeys.keySearch) {
                 if (button->IsDown()) {
                     SKSE::log::info("Opening Search Menu");
-                    prismaUI->Invoke(view, "showMenu('searchMenu')");
+                    magelight->InvokeJS(view, "showMenu('searchMenu')");
                 }
             } else if (key == (uint32_t)cachedKeys.keyAlignment) {
                 if (button->IsDown()) {
                     SKSE::log::info("Opening Alignment Menu");
-                    prismaUI->Invoke(view, "showMenu('alignMenu')");
+                    magelight->InvokeJS(view, "showMenu('alignMenu')");
                 }
             }
             else if (key == KEY_ESCAPE) controlStr = "esc";
@@ -287,9 +304,9 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             if (controlStr) {
                 if (button->IsDown()) {
                     std::string script = "handleControlStart('" + std::string(controlStr) + "')";
-                    prismaUI->Invoke(view, script.c_str());
+                    magelight->InvokeJS(view, script.c_str());
                 } else if (button->IsUp()) {
-                    prismaUI->Invoke(view, "handleControlEnd()");
+                    magelight->InvokeJS(view, "handleControlEnd()");
                 }
             }
         }
@@ -303,153 +320,185 @@ void PrismaUIManager::Initialize() {
         return;
     }
 
-    auto api = PRISMA_UI_API::RequestPluginAPI(PRISMA_UI_API::InterfaceVersion::V1);
+    auto api = MAGELIGHT_API::RequestApi4();
     if (!api) {
-        SKSE::log::info("PrismaUI not available");
+        SKSE::log::info("Magelight UI not available");
         return;
     }
 
-    prismaUI = static_cast<PRISMA_UI_API::IVPrismaUI1*>(api);
+    MAGELIGHT_API::ModDesc desc{};
+    desc.size = sizeof(desc);
+    desc.modId = "OStimPrism";
+    desc.displayName = "OStim Prism";
+    desc.modVersion = MAGELIGHT_API::PackVersion(0, 0, 1);
+    desc.minHostVersion = MAGELIGHT_API::PackVersion(0, 28, 0);
+    desc.callbackThread = MAGELIGHT_API::CallbackThread::GameThread;
+    desc.onEvent = &PrismaUIManager::OnMagelightEvent;
+    desc.onLog = nullptr;
+    desc.user = this;
+    desc.sessionName = nullptr;
+
+    MAGELIGHT_API::ModId registeredMod = 0;
+    auto res = api->RegisterMod(&desc, &registeredMod);
+    if (res != MAGELIGHT_API::Result::Ok || !registeredMod) {
+        SKSE::log::error("Failed to register OStimPrism with Magelight UI (result={})", static_cast<int>(res));
+        return;
+    }
+
+    magelight = api;
+    modId = registeredMod;
     initialized = true;
-    SKSE::log::info("PrismaUI initialized successfully for OStim Prism");
+    SKSE::log::info("Magelight UI (host {}) initialized successfully for OStim Prism (modId={})",
+        magelight->hostVersion ? magelight->hostVersion : "?", modId);
+
+    // Create a single persistent view (hidden until a scene starts).
+    // Magelight pauses hidden views completely (0 CPU/GPU cost while hidden).
+    const std::string pagePath = GetPagePath();
+    MAGELIGHT_API::ViewDesc vd{};
+    vd.size = sizeof(vd);
+    vd.name = "OStim";
+    vd.htmlPath = pagePath.c_str();
+    vd.anchor = MAGELIGHT_API::Anchor::TopLeft;
+    vd.fullscreen = true;
+    vd.clickThrough = false;
+    vd.startVisible = false;
+    vd.layer = MAGELIGHT_API::Layer::Panel;
+    vd.uiScale = 0.0f;
+    vd.onDomReady = nullptr; // Handled on the game thread via Event::ViewDomReady
+
+    MAGELIGHT_API::ViewId newView = 0;
+    res = magelight->CreateViewEx(modId, &vd, &newView);
+    if (res != MAGELIGHT_API::Result::Ok || !newView) {
+        SKSE::log::error("Failed to create Magelight view ({}): {}",
+            static_cast<int>(res), magelight->GetLastErrorMessage(modId));
+        return;
+    }
+
+    view = newView;
+    isCurrentlyVisible = false;
+    magelight->RegisterJSListener(view, "sendAction", &PrismaUIManager::OnAction);
+
+    if (magelight->hostVersionNumber >= 2800 && magelight->QueryCapability("escapecapture") == 1) {
+        magelight->SetEscapeCapture(view, true);
+    }
+
+    if (magelight->hostVersionNumber >= 10600 && magelight->QueryCapability("gamepad") == 1) {
+        MAGELIGHT_API::GamepadConfig pad{};
+        pad.size = sizeof(pad);
+        pad.enabled = true;
+        pad.style = MAGELIGHT_API::kGamepadStyleKeys;
+        pad.allowCursor = true;
+        magelight->SetViewGamepad(view, &pad);
+    }
+
+    if (magelight->hostVersionNumber >= 3111 && magelight->QueryCapability("prepaint") == 1) {
+        magelight->SetViewPrepaint(view, true);
+    }
+
+    SKSE::log::info("Magelight persistent view created: {} ({})", newView, pagePath);
+
     StartListeningModEvents();
     StartListeningMenuEvents();
 }
 
 void PrismaUIManager::Show() {
-    if (!prismaUI) {
+    if (!IsViewValid()) {
         return;
     }
 
-    if (view && prismaUI->IsValid(view)) {
-        prismaUI->Show(view);
-        return;
-    }
+    hiddenByUser = false;
+    hiddenByIdle = false;
+    ResetIdleTimer();
+    ApplyVisibility();
 
-    auto newView = prismaUI->CreateView("OStim/index.html", OnDomReady);
+    magelight->InvokeJS(view, "showMenu('navigation')");
+    UpdateNavigation();
+    UpdateExcitements();
+    UpdateOptions();
+    UpdateThreadStatus();
+    UpdateKeys();
 
-    if (!newView) {
-        SKSE::log::error("Failed to create PrismaUI view");
-        return;
-    }
-
-    view = newView;
+    StartListeningInput();
     StartPolling();
-    SKSE::log::info("PrismaUI view created: {}", newView);
 }
 
 void PrismaUIManager::Hide() {
-    if (!prismaUI || !view) {
-        return;
-    }
-
-    if (prismaUI->IsValid(view)) {
-        prismaUI->Hide(view);
-    }
-}
-
-void PrismaUIManager::Destroy() {
-    if (!prismaUI || !view) {
-        return;
-    }
-
     StopPolling();
     StopListeningInput();
 
-    // Ensure text input mode is released if a field was focused when destroyed
-    SetTextInputFocus(false);
-
-    // Ensure keyboard blocking is disabled when the UI is destroyed
-    KeyboardInputBlocker::SetBlocking(false);
-
-    // Hide immediately
-    if (prismaUI->IsValid(view)) {
-        prismaUI->Unfocus(view);
-        prismaUI->Hide(view);
-        SKSE::log::info("Hiding PrismaUI view: {}; focused={}", view, prismaUI->HasFocus(view));
-    }
-    
-    // Defer destruction to avoid potential deadlocks if called from certain contexts
-    // or if the UI is busy.
-    // Making a copy of view ID to capture in lambda
-    PrismaView viewToDestroy = view;
-    view = 0; // Mark as invalid immediately
-    inspectorCreated = false;
-    openMenuCount = 0;
-    hiddenByMenu = false;
+    currentThreadID = INVALID_THREAD_ID;
     hiddenByUser = false;
     hiddenByIdle = false;
-    isKeyboardBlockingIntended = false;
     lastActivityTime.store(0);
 
-    SKSE::GetTaskInterface()->AddTask([this, viewToDestroy]() {
-        if (prismaUI && prismaUI->IsValid(viewToDestroy)) {
-            if (prismaUI->HasFocus(viewToDestroy)) {
-                SKSE::log::info("View still focused at destroy time, unfocusing: {}", viewToDestroy);
-                prismaUI->Unfocus(viewToDestroy);
-            }
-        }
-        // Poll until focus is released, then destroy
-        std::thread([this, viewToDestroy]() {
-            auto stillFocused = std::make_shared<std::atomic<bool>>(true);
-            int maxWaitMs = 2000;
-            int waited = 0;
-            while (waited < maxWaitMs) {
-                SKSE::GetTaskInterface()->AddTask([this, viewToDestroy, stillFocused]() {
-                    stillFocused->store(prismaUI && prismaUI->IsValid(viewToDestroy) && prismaUI->HasFocus(viewToDestroy));
-                });
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                waited += 100;
-                if (!stillFocused->load()) break;
-                SKSE::log::info("Waiting for unfocus... ({}ms)", waited);
-            }
-            SKSE::GetTaskInterface()->AddTask([this, viewToDestroy]() {
-                if (prismaUI && prismaUI->IsValid(viewToDestroy)) {
-                    SKSE::log::info("Destroying PrismaUI view after unfocus: {}", viewToDestroy);
-                    prismaUI->Destroy(viewToDestroy);
-                }
-            });
-        }).detach();
-    });
+    if (IsViewValid()) {
+        magelight->InvokeJS(view, "handleControlEnd()");
+        magelight->InvokeJS(view, "showMenu('navigation')");
+    }
+
+    ApplyVisibility();
 }
 
 void PrismaUIManager::StartPolling() {
     if (isPolling) return;
     isPolling = true;
-    
+    uint64_t gen = ++pollGeneration;
+
     // Ensure the polling loop starts on the main thread
-    SKSE::GetTaskInterface()->AddTask([this]() {
-        if (isPolling) {
-            PollUpdate();
+    SKSE::GetTaskInterface()->AddTask([this, gen]() {
+        if (isPolling && pollGeneration.load() == gen) {
+            PollUpdate(gen);
         }
     });
-    
+
     SKSE::log::info("Started polling for excitement updates (100ms interval)");
 }
 
 void PrismaUIManager::StopPolling() {
+    if (!isPolling) return;
     isPolling = false;
+    ++pollGeneration;
     SKSE::log::info("Stopped polling for excitement updates");
 }
 
 void PrismaUIManager::ResetIdleTimer() {
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     lastActivityTime.store(std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+    if (hiddenByIdle) {
+        SKSE::log::info("Activity detected — showing Magelight UI after idle");
+        hiddenByIdle = false;
+        ApplyVisibility();
+    }
 }
 
 void PrismaUIManager::ApplyVisibility() {
     if (!IsViewValid()) return;
-    bool shouldHide = hiddenByMenu || hiddenByUser || hiddenByIdle;
+    bool shouldHide = (currentThreadID == INVALID_THREAD_ID) || hiddenByMenu || hiddenByUser || hiddenByIdle;
     if (shouldHide) {
-        prismaUI->Hide(view);
+        if (HasFocus()) {
+            SetFocus(false);
+        } else {
+            magelight->CancelUIModeRequest(modId);
+        }
+        magelight->ShowView(view, false);
+        isCurrentlyVisible = false;
     } else {
-        prismaUI->Show(view);
+        bool wasHidden = !isCurrentlyVisible;
+        magelight->ShowView(view, true);
+        isCurrentlyVisible = true;
+        if (wasHidden) {
+            UpdateExcitements();
+        }
     }
 }
 
 void PrismaUIManager::CheckIdleTimeout() {
-    // Don't accumulate idle state while a menu is open or the user has explicitly hidden the UI
-    if (!IsViewValid() || hiddenByMenu || hiddenByUser) return;
+    // Don't accumulate idle state while a menu is open, user hid the UI, or UI mode is active
+    if (!IsViewValid() || currentThreadID == INVALID_THREAD_ID || hiddenByMenu || hiddenByUser) return;
+    if (HasFocus()) {
+        ResetIdleTimer();
+        return;
+    }
 
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
@@ -458,40 +507,34 @@ void PrismaUIManager::CheckIdleTimeout() {
 
     int64_t idleTimeoutMs = static_cast<int64_t>(Settings::GetSingleton()->idleTimeoutSec) * 1000;
     if (idleTimeoutMs > 0 && idleMs >= idleTimeoutMs && !hiddenByIdle) {
-        SKSE::log::info("UI idle for {}ms — hiding PrismaUI", idleMs);
+        SKSE::log::info("UI idle for {}ms — hiding Magelight UI", idleMs);
         hiddenByIdle = true;
-        ApplyVisibility();
-    } else if (idleMs < idleTimeoutMs && hiddenByIdle) {
-        SKSE::log::info("Activity detected — showing PrismaUI after idle");
-        hiddenByIdle = false;
         ApplyVisibility();
     }
 }
 
-void PrismaUIManager::PollUpdate() {
-    // Check polling flag first
-    if (!isPolling) return;
+void PrismaUIManager::PollUpdate(uint64_t generation) {
+    if (!isPolling || pollGeneration.load() != generation) return;
 
-    // Check thread ID validity
     if (currentThreadID == INVALID_THREAD_ID) {
         isPolling = false;
         return;
     }
 
-    UpdateExcitements();
+    if (isCurrentlyVisible) {
+        UpdateExcitements();
+    }
     CheckIdleTimeout();
 
     // Sleep in a background thread to avoid blocking the main game loop
-    std::thread([this]() {
+    std::thread([this, generation]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
+
         // Re-schedule PollUpdate on the main thread
-        // Use a weak check logic here: capture by value or verify singleton?
-        // Capturing 'this' is safe as long as singleton is alive (which it is for static/global duration)
-        if (isPolling) {
-            SKSE::GetTaskInterface()->AddTask([this]() {
-                if (isPolling) {
-                    PollUpdate();
+        if (isPolling && pollGeneration.load() == generation) {
+            SKSE::GetTaskInterface()->AddTask([this, generation]() {
+                if (isPolling && pollGeneration.load() == generation) {
+                    PollUpdate(generation);
                 }
             });
         }
@@ -500,7 +543,7 @@ void PrismaUIManager::PollUpdate() {
 
 void PrismaUIManager::UpdateKeys()
 {
-    if (!prismaUI || !view) return;
+    if (!IsViewValid()) return;
 
     auto dataProvider = OStimDataProvider::GetSingleton();
     if (!dataProvider->IsConnected()) return;
@@ -509,25 +552,7 @@ void PrismaUIManager::UpdateKeys()
     cachedKeys = keys;
     hasCachedKeys = true;
 
-    // Keep the allowed-key list in sync so blocking passes OStim nav keys through.
-    {
-        constexpr uint32_t KEY_ESCAPE = 0x01;
-        constexpr uint32_t KEY_TAB    = 0x0F;
-        std::vector<uint32_t> allowed = {
-            (uint32_t)keys.keyUp,    (uint32_t)keys.keyDown,
-            (uint32_t)keys.keyLeft,  (uint32_t)keys.keyRight,
-            (uint32_t)keys.keyYes,   (uint32_t)keys.keyEnd,
-            (uint32_t)keys.keyToggle,(uint32_t)keys.keySearch,
-            (uint32_t)keys.keyAlignment, (uint32_t)keys.keyHideUI,
-            (uint32_t)keys.keySpeedUp,   (uint32_t)keys.keySpeedDown,
-            KEY_ESCAPE, KEY_TAB,
-        };
-        for (uint32_t k : Settings::GetSingleton()->toggleFocusKeys) {
-            allowed.push_back(k);
-        }
-        KeyboardInputBlocker::SetAllowedKeys(std::move(allowed));
-        KeyboardInputBlocker::SetKeyHandler(&PrismaUIManager::OnAllowedKeyEvent);
-    }
+    const auto* settings = Settings::GetSingleton();
 
     json j = {        
         {"keyUp", keys.keyUp},
@@ -546,20 +571,18 @@ void PrismaUIManager::UpdateKeys()
         {"keyPullOut", keys.keyPullOut},
         {"keyAutoMode", keys.keyAutoMode},
         {"keyFreeCam", keys.keyFreeCam},
-        {"keyHideUI", keys.keyHideUI}
+        {"keyHideUI", keys.keyHideUI},
+        {"toggleFocusKeys", settings->toggleFocusKeys},
+        {"toggleInspectorKeys", settings->toggleInspectorKeys}
     };
     
     std::string script = "updateKeys(" + j.dump() + ")";
-    prismaUI->Invoke(view, script.c_str());
+    magelight->InvokeJS(view, script.c_str());
     SKSE::log::info("Sent key update to UI");
 }
 
 void PrismaUIManager::UpdateExcitements() {
-    // SKSE::log::info("UpdateExcitements called");
-
-    if (!prismaUI || !view) {
-        SKSE::log::warn("UpdateExcitements early return: prismaUI={}, view={}",
-            (void*)prismaUI, view);
+    if (!IsViewValid()) {
         return;
     }
 
@@ -585,21 +608,16 @@ void PrismaUIManager::UpdateExcitements() {
             {"timesClimaxed", actor.timesClimaxed},
             {"additionalProgress", actor.additionalProgress}
         });
-
-        // SKSE::log::info("Actor {}: excitement={}, stamina={}%, gender={}",
-        //    actor.name, actor.excitementProgress, actor.staminaProgress, actor.gender);
     }
 
     std::string script = "updateExcitements(" + actorsJson.dump() + ")";
-    prismaUI->Invoke(view, script.c_str());
+    magelight->InvokeJS(view, script.c_str());
 }
 
 void PrismaUIManager::UpdateNavigation() {
     SKSE::log::info("UpdateNavigation called");
 
-    if (!prismaUI || !view) {
-        SKSE::log::warn("UpdateNavigation early return: prismaUI={}, view={}",
-            (void*)prismaUI, view);
+    if (!IsViewValid()) {
         return;
     }
 
@@ -626,15 +644,13 @@ void PrismaUIManager::UpdateNavigation() {
     std::string jsonStr = navJson.dump();
     std::string script = "updateNavigation(" + jsonStr + ")";
     SKSE::log::info("UpdateNavigation sending {} options", options.size());
-    prismaUI->Invoke(view, script.c_str());
+    magelight->InvokeJS(view, script.c_str());
 }
 
 void PrismaUIManager::UpdateOptions() {
     SKSE::log::info("UpdateOptions called");
 
-    if (!prismaUI || !view) {
-        SKSE::log::warn("UpdateOptions early return: prismaUI={}, view={}",
-            (void*)prismaUI, view);
+    if (!IsViewValid()) {
         return;
     }
 
@@ -659,13 +675,11 @@ void PrismaUIManager::UpdateOptions() {
 
     std::string script = "updateOptions(" + optionsJson.dump() + ")";
     SKSE::log::info("UpdateOptions sending {} items", items.size());
-    prismaUI->Invoke(view, script.c_str());
+    magelight->InvokeJS(view, script.c_str());
 }
 
 void PrismaUIManager::UpdateThreadStatus() {
-    if (!prismaUI || !view) {
-        SKSE::log::warn("UpdateThreadStatus early return: prismaUI={}, view={}",
-            (void*)prismaUI, view);
+    if (!IsViewValid()) {
         return;
     }
 
@@ -687,7 +701,7 @@ void PrismaUIManager::UpdateThreadStatus() {
     };
 
     std::string statusScript = "updateThreadStatus(" + statusJson.dump() + ")";
-    prismaUI->Invoke(view, statusScript.c_str());
+    magelight->InvokeJS(view, statusScript.c_str());
 }
 
 void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, uint32_t threadID, void* /*userData*/) {
@@ -704,45 +718,18 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
         }
 
         switch (eventType) {
-            case OstimNG_API::Thread::ThreadEvent::ThreadStarted: {
+            case OstimNG_API::Thread::ThreadEvent::ThreadStarted:
                 SKSE::log::info("Thread started: {}", threadID);
                 manager->currentThreadID = threadID;
                 SetCrosshairTarget(false);
-                bool viewReused = manager->view != 0 && manager->prismaUI && manager->prismaUI->IsValid(manager->view);
                 manager->Show();
-                if (viewReused) {
-                    // View survived from the previous thread (rapid restart case).
-                    // Show() just made it visible but didn't restart polling or refresh data.
-                    SKSE::log::info("Thread restarted with existing view — refreshing UI state");
-                    if (!manager->isPolling) manager->StartPolling();
-                    manager->UpdateNavigation();
-                    manager->UpdateExcitements();
-                    manager->UpdateOptions();
-                    manager->UpdateThreadStatus();
-                    manager->UpdateKeys();
-                }
                 break;
-            }
 
             case OstimNG_API::Thread::ThreadEvent::ThreadEnded:
                 SKSE::log::info("Thread ended: {}", threadID);
                 if (manager->currentThreadID == threadID) {
                     SetCrosshairTarget(true);
-                    manager->StopPolling();
-                    manager->currentThreadID = INVALID_THREAD_ID;
-                    // Destroy asynchronously to allow polling tasks to drain.
-                    // Guard against rapid restart: if a new thread has already started
-                    // by the time this runs, skip the destroy so we don't kill the new view.
-                    std::thread([manager]() {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-                        SKSE::GetTaskInterface()->AddTask([manager]() {
-                            if (manager->currentThreadID == INVALID_THREAD_ID) {
-                                manager->Destroy();
-                            } else {
-                                SKSE::log::info("Skipping deferred Destroy: new thread started before destroy ran");
-                            }
-                        });
-                    }).detach();
+                    manager->Hide();
                 }
                 break;
 
@@ -757,105 +744,97 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
     });
 }
 
-void PrismaUIManager::OnAllowedKeyEvent(uint32_t key, bool isDown) {
-    auto manager = GetSingleton();
-    if (!manager || !manager->IsViewValid()) return;
-
-    // Toggle focus key
-    auto& focusKeys = Settings::GetSingleton()->toggleFocusKeys;
-    if (isDown && std::find(focusKeys.begin(), focusKeys.end(), key) != focusKeys.end()) {
-        if (manager->prismaUI->HasFocus(manager->view)) {
-            manager->prismaUI->Unfocus(manager->view);
-        } else {
-            manager->prismaUI->Focus(manager->view);
-        }
+void PrismaUIManager::OnMagelightEvent(const MAGELIGHT_API::EventData* ev, void* user) {
+    auto* manager = static_cast<PrismaUIManager*>(user);
+    if (!manager || !ev || !manager->magelight) {
         return;
     }
 
-    if (!manager->hasCachedKeys) return;
+    switch (ev->type) {
+        case MAGELIGHT_API::Event::ViewDomReady:
+        case MAGELIGHT_API::Event::ViewReloaded: {
+            if (ev->view != manager->view) return;
+            SKSE::log::info("Magelight view {} {}: syncing state",
+                ev->view, ev->type == MAGELIGHT_API::Event::ViewDomReady ? "DOM ready" : "reloaded");
 
-    constexpr uint32_t KEY_ESCAPE = 0x01;
-    constexpr uint32_t KEY_TAB    = 0x0F;
+            manager->UpdateKeys();
+            manager->magelight->InvokeJS(ev->view, "setGameReady()");
 
-    if (isDown) manager->ResetIdleTimer();
-
-    if (key == (uint32_t)manager->cachedKeys.keyHideUI) {
-        if (isDown) {
-            manager->hiddenByUser = !manager->hiddenByUser;
-            if (!manager->hiddenByUser) {
-                manager->hiddenByIdle = false;
+            if (manager->currentThreadID != INVALID_THREAD_ID) {
+                manager->UpdateNavigation();
+                manager->UpdateExcitements();
+                manager->UpdateOptions();
+                manager->UpdateThreadStatus();
                 manager->ResetIdleTimer();
+                manager->StartListeningInput();
             }
-            SKSE::log::info("keyHideUI toggled via blocker: hiddenByUser={}", manager->hiddenByUser);
-            manager->ApplyVisibility();
+            break;
         }
-        return;
-    }
 
-    // if (key == (uint32_t)manager->cachedKeys.keySearch) {
-    //     if (isDown) manager->prismaUI->Invoke(manager->view, "showMenu('searchMenu')");
-    //     return;
-    // }
-
-    // if (key == (uint32_t)manager->cachedKeys.keyAlignment) {
-    //     if (isDown) manager->prismaUI->Invoke(manager->view, "showMenu('alignMenu')");
-    //     return;
-    // }
-
-    const char* controlStr = nullptr;
-    if      (key == (uint32_t)manager->cachedKeys.keyUp)     controlStr = "up";
-    else if (key == (uint32_t)manager->cachedKeys.keyDown)   controlStr = "down";
-    else if (key == (uint32_t)manager->cachedKeys.keyLeft)   controlStr = "left";
-    else if (key == (uint32_t)manager->cachedKeys.keyRight)  controlStr = "right";
-    else if (key == (uint32_t)manager->cachedKeys.keyYes)    controlStr = "yes";
-    else if (key == (uint32_t)manager->cachedKeys.keyToggle) controlStr = "toggle";
-    else if (key == (uint32_t)manager->cachedKeys.keyEnd)    controlStr = "no";
-    else if (key == KEY_ESCAPE)                              controlStr = "esc";
-    else if (key == KEY_TAB)                                 controlStr = "tab";
-
-    if (controlStr) {
-        if (isDown) {
-            std::string script = "handleControlStart('" + std::string(controlStr) + "')";
-            manager->prismaUI->Invoke(manager->view, script.c_str());
-        } else {
-            manager->prismaUI->Invoke(manager->view, "handleControlEnd()");
+        case MAGELIGHT_API::Event::UIModeEntered: {
+            if (ev->view == manager->view) {
+                manager->hasUIMode.store(true);
+                manager->ResetIdleTimer();
+                SKSE::log::info("Magelight UI mode entered for view {}", ev->view);
+                if (manager->currentThreadID == INVALID_THREAD_ID || manager->hiddenByMenu || manager->hiddenByUser) {
+                    manager->ApplyVisibility();
+                }
+            }
+            break;
         }
+
+        case MAGELIGHT_API::Event::UIModeExited:
+        case MAGELIGHT_API::Event::UIModeRefused: {
+            manager->hasUIMode.store(false);
+            manager->ResetIdleTimer();
+            SKSE::log::info("Magelight UI mode exited/refused (view={}, detail='{}')",
+                ev->view, ev->detail ? ev->detail : "");
+            break;
+        }
+
+        case MAGELIGHT_API::Event::ViewLoadFailed: {
+            SKSE::log::error("Magelight view {} failed to load: {}",
+                ev->view, ev->detail ? ev->detail : "unknown error");
+            break;
+        }
+
+        default:
+            break;
     }
 }
 
-void PrismaUIManager::OnDomReady(PrismaView view) {
-    SKSE::log::info("PrismaUI DOM ready for view: {}", view);
-
-    auto manager = GetSingleton();
-    if (!manager || !manager->prismaUI) {
-        return;
+void PrismaUIManager::OnActionGameTask(void* user) {
+    std::unique_ptr<std::string> payload(static_cast<std::string*>(user));
+    if (!payload) return;
+    auto* manager = GetSingleton();
+    if (manager) {
+        manager->HandleActionOnGameThread(*payload);
     }
-
-    manager->view = view;
-
-    manager->prismaUI->Invoke(view, "console.log('OStim Prism UI loaded')");
-    manager->prismaUI->RegisterJSListener(view, "sendAction", OnAction);
-
-    manager->UpdateNavigation();
-    manager->UpdateExcitements();
-    manager->UpdateOptions();
-    manager->UpdateThreadStatus();
-    manager->UpdateKeys();
-
-    std::string gameReadyScript = "setGameReady()";
-    manager->prismaUI->Invoke(view, gameReadyScript.c_str());
-
-    // Start listening for input and seed the idle timer so the 30s window starts now
-    manager->ResetIdleTimer();
-    manager->StartListeningInput();
 }
 
 void PrismaUIManager::OnAction(const char* data) {
-    SKSE::log::info("PrismaUI action received: {}", data);
+    if (!data) return;
+    auto* manager = GetSingleton();
+    if (!manager || !manager->magelight) return;
 
-    auto manager = GetSingleton();
+    auto* copy = new std::string(data);
+    if (manager->magelight->hostVersionNumber >= 3001) {
+        if (manager->magelight->PostGameTask(&PrismaUIManager::OnActionGameTask, copy) != MAGELIGHT_API::Result::Ok) {
+            delete copy;
+        }
+    } else {
+        std::thread([copy]() {
+            SKSE::GetTaskInterface()->AddTask([copy]() {
+                OnActionGameTask(copy);
+            });
+        }).detach();
+    }
+}
+
+void PrismaUIManager::HandleActionOnGameThread(const std::string& data) {
+    SKSE::log::info("Magelight UI action received: {}", data);
+
     auto dataProvider = OStimDataProvider::GetSingleton();
-
     if (!dataProvider->IsConnected()) {
         SKSE::log::warn("Cannot handle action: OStim not connected");
         return;
@@ -866,12 +845,12 @@ void PrismaUIManager::OnAction(const char* data) {
 
         std::string action = actionData.value("action", "");
         if (action.empty()) {
-            SKSE::log::warn("PrismaUI action missing 'action' field");
+            SKSE::log::warn("Magelight UI action missing 'action' field");
             return;
         }
 
         auto sendAlignmentUpdate = [&](uint32_t threadID, uint32_t actorIndex) {
-            if (!manager || !manager->prismaUI || !manager->view) {
+            if (!IsViewValid()) {
                 return;
             }
 
@@ -899,8 +878,8 @@ void PrismaUIManager::OnAction(const char* data) {
                 actorGender = actors[actorIndex].gender;
             }
 
-            OStimDataProvider::AlignmentData data{};
-            if (!dataProvider->GetActorAlignment(threadID, actorIndex, data)) {
+            OStimDataProvider::AlignmentData alignData{};
+            if (!dataProvider->GetActorAlignment(threadID, actorIndex, alignData)) {
                 SKSE::log::warn("Failed to fetch alignment data (actorIndex={})", actorIndex);
                 return;
             }
@@ -913,12 +892,12 @@ void PrismaUIManager::OnAction(const char* data) {
                 {"actorName", actorName},
                 {"actorGender", actorGender},
                 {"data", {
-                    {"offsetX", data.offsetX},
-                    {"offsetY", data.offsetY},
-                    {"offsetZ", data.offsetZ},
-                    {"scale", data.scale},
-                    {"rotation", data.rotation},
-                    {"sosBend", data.sosBend}
+                    {"offsetX", alignData.offsetX},
+                    {"offsetY", alignData.offsetY},
+                    {"offsetZ", alignData.offsetZ},
+                    {"scale", alignData.scale},
+                    {"rotation", alignData.rotation},
+                    {"sosBend", alignData.sosBend}
                 }}
             };
 
@@ -926,7 +905,7 @@ void PrismaUIManager::OnAction(const char* data) {
                 actorIndex, sceneInfo.sceneId, actorName);
 
             std::string script = "updateAlignment(" + payload.dump() + ")";
-            manager->prismaUI->Invoke(manager->view, script.c_str());
+            magelight->InvokeJS(view, script.c_str());
         };
 
         if (action == "navigationSelect") {
@@ -934,7 +913,7 @@ void PrismaUIManager::OnAction(const char* data) {
             std::string destination = payload.value("destination", "");
 
             if (destination.empty()) {
-                SKSE::log::warn("PrismaUI navigationSelect missing destination");
+                SKSE::log::warn("Magelight UI navigationSelect missing destination");
                 return;
             }
 
@@ -946,7 +925,7 @@ void PrismaUIManager::OnAction(const char* data) {
                 SKSE::log::warn("Cannot navigate: not on player thread (threadID={})", threadID);
             }
         } else if (action == "searchQuery") {
-            if (!manager || !manager->prismaUI || !manager->view) {
+            if (!IsViewValid()) {
                 return;
             }
 
@@ -954,7 +933,7 @@ void PrismaUIManager::OnAction(const char* data) {
             std::string query = payload.value("query", "");
 
             if (query.empty()) {
-                manager->prismaUI->Invoke(manager->view, "updateSearchResults([])");
+                magelight->InvokeJS(view, "updateSearchResults([])");
                 return;
             }
 
@@ -969,20 +948,19 @@ void PrismaUIManager::OnAction(const char* data) {
             }
 
             std::string script = "updateSearchResults(" + resultsJson.dump() + ")";
-            manager->prismaUI->Invoke(manager->view, script.c_str());
+            magelight->InvokeJS(view, script.c_str());
         } else if (action == "searchSelect") {
             auto payload = actionData.value("payload", json::object());
             std::string sceneId = payload.value("sceneId", "");
 
             if (sceneId.empty()) {
-                SKSE::log::warn("PrismaUI searchSelect missing sceneId");
+                SKSE::log::warn("Magelight UI searchSelect missing sceneId");
                 return;
             }
 
             uint32_t threadID = dataProvider->GetCurrentThreadID();
             if (threadID == 0) {
                 dataProvider->NavigateToSearchResult(threadID, sceneId);
-                // dataProvider->NavigateToScene(threadID, sceneId);
             } else {
                 SKSE::log::warn("Cannot navigate search result: not on player thread (threadID={})", threadID);
             }
@@ -995,13 +973,13 @@ void PrismaUIManager::OnAction(const char* data) {
                 // Returns true if still in options menu
                 bool stillOpen = dataProvider->SelectOptionsItem(index);
 
-                if(!stillOpen) {
+                if (!stillOpen) {
                     SKSE::log::info("Options menu closed after selecting index {}", index);
                     std::string script = "showMenu('navigation')";
-                    manager->prismaUI->Invoke(manager->view, script.c_str());
+                    magelight->InvokeJS(view, script.c_str());
                 } else {
                     // Refresh the options list (could be new page or empty if closed)
-                    manager->UpdateOptions();
+                    UpdateOptions();
                 }
             } else {
                 SKSE::log::warn("Cannot select option: not on player thread (threadID={})", threadID);
@@ -1067,8 +1045,6 @@ void PrismaUIManager::OnAction(const char* data) {
                 SKSE::log::warn("Failed to apply alignment set (actorIndex={})", actorIndex);
                 return;
             }
-
-            // sendAlignmentUpdate(threadID, actorIndex);
         } else if (action == "setSpeed") {
             auto payload = actionData.value("payload", json::object());
             int32_t speed = (payload.contains("speed") && payload["speed"].is_number()) ? payload["speed"].get<int32_t>() : 1;
@@ -1078,32 +1054,24 @@ void PrismaUIManager::OnAction(const char* data) {
                 dataProvider->SetSpeed(threadID, speed);
                 SKSE::log::info("setSpeed: applied speed {} on thread {}", speed, threadID);
                 // Echo updated status back to UI immediately
-                if (manager) manager->UpdateThreadStatus();
+                UpdateThreadStatus();
             } else {
                 SKSE::log::warn("Cannot set speed: not on player thread (threadID={})", threadID);
             }
         } else if (action == "focus") {
             auto payload = actionData.value("payload", json::object());
             bool shouldFocus = (payload.contains("shouldFocus") && payload["shouldFocus"].is_boolean()) ? payload["shouldFocus"].get<bool>() : false;
-            if (manager->prismaUI && manager->view) {
-                if (shouldFocus) {
-                    manager->prismaUI->Focus(manager->view);
-                } else {
-                    manager->prismaUI->Unfocus(manager->view);
-                }
-            }
-        } else if (action == "setTextInputFocus") {
-            auto payload = actionData.value("payload", json::object());
-            bool focused = (payload.contains("focused") && payload["focused"].is_boolean()) ? payload["focused"].get<bool>() : false;
-            manager->isKeyboardBlockingIntended = focused;
-            KeyboardInputBlocker::SetBlocking(focused && manager->openMenuCount == 0);
-            SKSE::GetTaskInterface()->AddTask([manager, focused]() {
-                manager->SetTextInputFocus(focused);
-            });
+            SetFocus(shouldFocus);
+        } else if (action == "toggleFocus") {
+            SetFocus(!HasFocus());
+        } else if (action == "toggleInspector") {
+            ToggleInspector();
+        } else if (action == "toggleHideUI") {
+            ToggleHideUI();
         } else {
-            SKSE::log::warn("PrismaUI unknown action: {}", action);
+            SKSE::log::warn("Magelight UI unknown action: {}", action);
         }
     } catch (const std::exception& e) {
-        SKSE::log::error("PrismaUI exception handling action JSON: {}", e.what());
+        SKSE::log::error("Magelight UI exception handling action JSON: {}", e.what());
     }
 }

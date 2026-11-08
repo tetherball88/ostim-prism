@@ -3,6 +3,7 @@ import { useOStimStore } from "../../store";
 import "./SearchMenu.styles.css";
 import { isInGame } from "../../utils/isInGame";
 import { SearchResult } from "../../types";
+import { getNormalizedKeyCode } from "../../utils/keys";
 
 const SEARCH_DEBOUNCE_MS = 150;
 const mockResults: SearchResult[] = [
@@ -37,8 +38,9 @@ export const SearchMenu = () => {
   useEffect(() => {
       let lastKey: null | number = null;
       const handleKeyDown = (event: KeyboardEvent) => {
-        console.log("Key pressed:", event.keyCode);
-        lastKey = event.keyCode;
+        const code = getNormalizedKeyCode(event);
+        console.log("Key pressed:", code);
+        lastKey = code;
       }
       const numKeys: number[] = [keys.keyDown, keys.keyUp, keys.keyLeft, keys.keyRight, keys.keyYes];
       console.log("Current keys:", keys);
@@ -69,8 +71,6 @@ export const SearchMenu = () => {
       if (debounceRef.current !== null) {
         window.clearTimeout(debounceRef.current);
       }
-
-      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     };
   }, []);
 
@@ -121,21 +121,10 @@ export const SearchMenu = () => {
     selectSearchResult(index);
   };
 
-  const handleInputFocus = () => {
-    if (isInGame()) {
-      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: true } }));
-    }
-  };
-
   const handleInputBlur = (e: FocusEvent<HTMLInputElement>) => {
     if (focusBlock === 'menu' && !e.relatedTarget) {
         // Prevent losing focus when clicking non-focusable elements (like scrollbar)
         e.target.focus();
-        return;
-    }
-
-    if (isInGame()) {
-      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     }
   };
 
@@ -153,7 +142,6 @@ export const SearchMenu = () => {
         placeholder="Type a scene name..."
         value={query}
         onChange={handleChange}
-        onFocus={handleInputFocus}
         onBlur={handleInputBlur}
       />
 

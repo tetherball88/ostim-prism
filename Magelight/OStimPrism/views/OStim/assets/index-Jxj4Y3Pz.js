@@ -7499,13 +7499,14 @@
       var _a, _b;
       const prevMenu = state.activeMenu;
       console.log(`Updating active menu from ${prevMenu} to ${menu}`);
-      if (prevMenu === "alignMenu" || prevMenu === "searchMenu") {
+      const wasFocusedMenu = prevMenu === "alignMenu" || prevMenu === "searchMenu";
+      const isFocusedMenu = menu === "alignMenu" || menu === "searchMenu";
+      if (wasFocusedMenu && !isFocusedMenu) {
         (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({
           action: "focus",
           payload: { shouldFocus: false }
         }));
-      }
-      if (menu === "alignMenu" || menu === "searchMenu") {
+      } else if (!wasFocusedMenu && isFocusedMenu) {
         (_b = window.sendAction) == null ? void 0 : _b.call(window, JSON.stringify({
           action: "focus",
           payload: { shouldFocus: true }
@@ -7529,6 +7530,9 @@
         else if (lowerCaseControl === "down") state.moveControlButtonsFocus(-1);
         else if (lowerCaseControl === "yes") state.updateActiveMenu(((_a = state.controlButtons.buttons[state.controlButtons.activeIndex]) == null ? void 0 : _a.id) || "navigation");
         else if (lowerCaseControl === "right") state.setFocusBlock("menu");
+        else if (lowerCaseControl === "esc" && (activeMenu === "alignMenu" || activeMenu === "searchMenu")) {
+          state.updateActiveMenu("navigation");
+        }
       } else {
         if (activeMenu === "alignMenu") {
           const activeFieldIdx = state.alignment.activeField;
@@ -8082,6 +8086,119 @@
       ))
     ] });
   };
+  const PLACEHOLDER_ICON = "./assets/icons/placeholder.png";
+  const ddsPngCache = /* @__PURE__ */ new Map();
+  const MAX_CACHE_ENTRIES = 256;
+  const CRC32_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n2 = 0; n2 < 256; n2++) {
+      let c = n2;
+      for (let k2 = 0; k2 < 8; k2++) {
+        c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+      }
+      table[n2] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(bytes, start, length) {
+    let c = 4294967295;
+    const end = start + length;
+    for (let i = start; i < end; i++) {
+      c = CRC32_TABLE[(c ^ bytes[i]) & 255] ^ c >>> 8;
+    }
+    return (c ^ 4294967295) >>> 0;
+  }
+  function uint8ToBase64(bytes) {
+    const CHUNK = 32768;
+    const parts = [];
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+      parts.push(String.fromCharCode.apply(null, slice));
+    }
+    return "data:image/png;base64," + btoa(parts.join(""));
+  }
+  function encodeRgbaToPngDataUrl(width, height, rgba) {
+    const rowStride = width * 4;
+    const scanlineLen = 1 + rowStride;
+    const rawDataLen = height * scanlineLen;
+    const maxBlockSize = 65535;
+    const numBlocks = Math.ceil(rawDataLen / maxBlockSize) || 1;
+    const zlibLen = 2 + rawDataLen + numBlocks * 5 + 4;
+    const totalLen = 8 + 25 + 12 + zlibLen + 12;
+    const out = new Uint8Array(totalLen);
+    const view = new DataView(out.buffer);
+    let pos = 0;
+    out.set([137, 80, 78, 71, 13, 10, 26, 10], pos);
+    pos += 8;
+    view.setUint32(pos, 13, false);
+    pos += 4;
+    const ihdrTypeStart = pos;
+    out.set([73, 72, 68, 82], pos);
+    pos += 4;
+    view.setUint32(pos, width, false);
+    pos += 4;
+    view.setUint32(pos, height, false);
+    pos += 4;
+    out[pos++] = 8;
+    out[pos++] = 6;
+    out[pos++] = 0;
+    out[pos++] = 0;
+    out[pos++] = 0;
+    view.setUint32(pos, crc32(out, ihdrTypeStart, 17), false);
+    pos += 4;
+    view.setUint32(pos, zlibLen, false);
+    pos += 4;
+    const idatTypeStart = pos;
+    out.set([73, 68, 65, 84], pos);
+    pos += 4;
+    out[pos++] = 120;
+    out[pos++] = 1;
+    const rawScanlines = new Uint8Array(rawDataLen);
+    let s1 = 1;
+    let s2 = 0;
+    let rawPos = 0;
+    let srcPos = 0;
+    for (let y2 = 0; y2 < height; y2++) {
+      rawScanlines[rawPos++] = 0;
+      s2 = (s2 + s1) % 65521;
+      for (let i = 0; i < rowStride; i++) {
+        const b = rgba[srcPos++];
+        rawScanlines[rawPos++] = b;
+        s1 += b;
+        if (s1 >= 65521) s1 -= 65521;
+        s2 += s1;
+        if (s2 >= 65521) s2 -= 65521;
+      }
+    }
+    let remaining = rawDataLen;
+    let scanOffset = 0;
+    for (let b = 0; b < numBlocks; b++) {
+      const blockLen = Math.min(remaining, maxBlockSize);
+      const isFinal = b === numBlocks - 1 ? 1 : 0;
+      out[pos++] = isFinal;
+      view.setUint16(pos, blockLen, true);
+      pos += 2;
+      view.setUint16(pos, ~blockLen & 65535, true);
+      pos += 2;
+      out.set(rawScanlines.subarray(scanOffset, scanOffset + blockLen), pos);
+      pos += blockLen;
+      scanOffset += blockLen;
+      remaining -= blockLen;
+    }
+    const adler = (s2 << 16 | s1) >>> 0;
+    view.setUint32(pos, adler, false);
+    pos += 4;
+    view.setUint32(pos, crc32(out, idatTypeStart, 4 + zlibLen), false);
+    pos += 4;
+    view.setUint32(pos, 0, false);
+    pos += 4;
+    const iendTypeStart = pos;
+    out.set([73, 69, 78, 68], pos);
+    pos += 4;
+    view.setUint32(pos, crc32(out, iendTypeStart, 4), false);
+    pos += 4;
+    return uint8ToBase64(out);
+  }
   function base64ToArrayBuffer(base64) {
     const binaryString = atob(base64);
     const bytes = new Uint8Array(binaryString.length);
@@ -8090,55 +8207,56 @@
     }
     return bytes.buffer;
   }
-  const PLACEHOLDER_ICON = "./assets/icons/placeholder.png";
-  const Icon = ({ base64Data, path = "", size = "4em" }) => {
-    const canvasRef = reactExports.useRef(null);
-    const [imageSrc, setImageSrc] = reactExports.useState(null);
-    reactExports.useEffect(() => {
-      if (!base64Data) {
-        setImageSrc(path || PLACEHOLDER_ICON);
-        return;
-      }
-      const processDDS = (buffer2) => {
-        try {
-          const dataView = new DataView(buffer2);
-          const magic = dataView.getUint32(0, true);
-          if (magic !== 542327876) {
-            console.error("Not a valid DDS file");
-            return;
-          }
-          const headerHeight = dataView.getUint32(12, true);
-          const headerWidth = dataView.getUint32(16, true);
-          const fourCC = dataView.getUint32(84, true);
-          const dataOffset = 128;
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          canvas.width = headerWidth;
-          canvas.height = headerHeight;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return;
-          const imageData = ctx.createImageData(headerWidth, headerHeight);
-          if (fourCC === 827611204) {
-            decodeDXT1(buffer2, dataOffset, headerWidth, headerHeight, imageData.data);
-          } else if (fourCC === 894720068) {
-            decodeDXT5(buffer2, dataOffset, headerWidth, headerHeight, imageData.data);
-          } else {
-            console.error("Unsupported DDS format:", fourCC.toString(16));
-            return;
-          }
-          ctx.putImageData(imageData, 0, 0);
-          setImageSrc(canvas.toDataURL());
-        } catch (err) {
-          console.error("Failed to decode DDS:", err);
-        }
-      };
+  function decodeDdsBase64(base64Data) {
+    const cached = ddsPngCache.get(base64Data);
+    if (cached) {
+      return cached;
+    }
+    try {
       const buffer = base64ToArrayBuffer(base64Data);
-      processDDS(buffer);
-    }, [base64Data]);
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("canvas", { ref: canvasRef, style: { display: "none" } }),
-      imageSrc && /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageSrc, style: { width: size, height: size }, alt: "" })
-    ] });
+      const dataView = new DataView(buffer);
+      const magic = dataView.getUint32(0, true);
+      if (magic !== 542327876) {
+        console.error("Not a valid DDS file");
+        return null;
+      }
+      const headerHeight = dataView.getUint32(12, true);
+      const headerWidth = dataView.getUint32(16, true);
+      const fourCC = dataView.getUint32(84, true);
+      const dataOffset = 128;
+      const rgba = new Uint8Array(headerWidth * headerHeight * 4);
+      if (fourCC === 827611204) {
+        decodeDXT1(buffer, dataOffset, headerWidth, headerHeight, rgba);
+      } else if (fourCC === 861165636) {
+        decodeDXT3(buffer, dataOffset, headerWidth, headerHeight, rgba);
+      } else if (fourCC === 894720068) {
+        decodeDXT5(buffer, dataOffset, headerWidth, headerHeight, rgba);
+      } else {
+        console.error("Unsupported DDS format:", fourCC.toString(16));
+        return null;
+      }
+      const dataUrl = encodeRgbaToPngDataUrl(headerWidth, headerHeight, rgba);
+      if (ddsPngCache.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = ddsPngCache.keys().next().value;
+        if (oldestKey !== void 0) {
+          ddsPngCache.delete(oldestKey);
+        }
+      }
+      ddsPngCache.set(base64Data, dataUrl);
+      return dataUrl;
+    } catch (err) {
+      console.error("Failed to decode DDS:", err);
+      return null;
+    }
+  }
+  const Icon = ({ base64Data, path = "", size = "4em" }) => {
+    const imageSrc = reactExports.useMemo(() => {
+      if (!base64Data) {
+        return path || PLACEHOLDER_ICON;
+      }
+      return decodeDdsBase64(base64Data) || path || PLACEHOLDER_ICON;
+    }, [base64Data, path]);
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageSrc, style: { width: size, height: size }, alt: "" });
   };
   function decodeDXT1(buffer, offset, width, height, output) {
     const data = new DataView(buffer);
@@ -8169,6 +8287,38 @@
       }
     }
   }
+  function decodeDXT3(buffer, offset, width, height, output) {
+    const data = new DataView(buffer);
+    const blocksX = Math.ceil(width / 4);
+    const blocksY = Math.ceil(height / 4);
+    for (let by = 0; by < blocksY; by++) {
+      for (let bx = 0; bx < blocksX; bx++) {
+        const blockOffset = offset + (by * blocksX + bx) * 16;
+        const c0 = data.getUint16(blockOffset + 8, true);
+        const c1 = data.getUint16(blockOffset + 10, true);
+        const indices = data.getUint32(blockOffset + 12, true);
+        const colors = decodeColors565(c0, c1, false);
+        for (let py = 0; py < 4; py++) {
+          const alphaRow = data.getUint16(blockOffset + py * 2, true);
+          for (let px = 0; px < 4; px++) {
+            const x2 = bx * 4 + px;
+            const y2 = by * 4 + py;
+            if (x2 >= width || y2 >= height) continue;
+            const pixelIdx = py * 4 + px;
+            const colorIdx = indices >> pixelIdx * 2 & 3;
+            const alpha4 = alphaRow >> px * 4 & 15;
+            const alpha = alpha4 << 4 | alpha4;
+            const color = colors[colorIdx];
+            const outIdx = (y2 * width + x2) * 4;
+            output[outIdx] = color[0];
+            output[outIdx + 1] = color[1];
+            output[outIdx + 2] = color[2];
+            output[outIdx + 3] = alpha;
+          }
+        }
+      }
+    }
+  }
   function decodeDXT5(buffer, offset, width, height, output) {
     const data = new DataView(buffer);
     const blocksX = Math.ceil(width / 4);
@@ -8178,7 +8328,8 @@
         const blockOffset = offset + (by * blocksX + bx) * 16;
         const a0 = data.getUint8(blockOffset);
         const a1 = data.getUint8(blockOffset + 1);
-        const alphaBits = data.getUint8(blockOffset + 2) | data.getUint8(blockOffset + 3) << 8 | data.getUint8(blockOffset + 4) << 16 | data.getUint8(blockOffset + 5) << 24 | data.getUint8(blockOffset + 6) * 4294967296 | data.getUint8(blockOffset + 7) * 1099511627776;
+        const alphaLo = data.getUint32(blockOffset + 2, true) & 16777215;
+        const alphaHi = data.getUint32(blockOffset + 5, true) >>> 0 & 16777215;
         const alphas = decodeAlphas(a0, a1);
         const c0 = data.getUint16(blockOffset + 8, true);
         const c1 = data.getUint16(blockOffset + 10, true);
@@ -8191,7 +8342,8 @@
             if (x2 >= width || y2 >= height) continue;
             const pixelIdx = py * 4 + px;
             const colorIdx = indices >> pixelIdx * 2 & 3;
-            const alphaIdx = alphaBits / Math.pow(2, pixelIdx * 3) & 7;
+            const bitPos = pixelIdx * 3;
+            const alphaIdx = bitPos < 24 ? alphaLo >> bitPos & 7 : alphaHi >> bitPos - 24 & 7;
             const color = colors[colorIdx];
             const alpha = alphas[alphaIdx];
             const outIdx = (y2 * width + x2) * 4;
@@ -8361,6 +8513,95 @@
       }
     );
   };
+  const numKeys = [
+    {
+      code: "Numpad0",
+      key: "0",
+      keyCode: 96
+    },
+    {
+      code: "Numpad1",
+      key: "1",
+      keyCode: 97
+    },
+    {
+      code: "Numpad2",
+      key: "2",
+      keyCode: 98
+    },
+    {
+      code: "Numpad3",
+      key: "3",
+      keyCode: 99
+    },
+    {
+      code: "Numpad4",
+      key: "4",
+      keyCode: 100
+    },
+    {
+      code: "Numpad5",
+      key: "5",
+      keyCode: 101
+    },
+    {
+      code: "Numpad6",
+      key: "6",
+      keyCode: 102
+    },
+    {
+      code: "Numpad7",
+      key: "7",
+      keyCode: 103
+    },
+    {
+      code: "Numpad8",
+      key: "8",
+      keyCode: 104
+    },
+    {
+      code: "Numpad9",
+      key: "9",
+      keyCode: 105
+    },
+    {
+      code: "NumpadAdd",
+      key: "+",
+      keyCode: 107
+    },
+    {
+      code: "NumpadSubtract",
+      key: "-",
+      keyCode: 109
+    },
+    {
+      code: "NumpadDecimal",
+      key: ".",
+      keyCode: 110
+    },
+    {
+      code: "NumpadDivide",
+      key: "/",
+      keyCode: 111
+    },
+    {
+      code: "NumpadMultiply",
+      key: "*",
+      keyCode: 106
+    }
+    // {
+    //     code: 'NumpadEnter',
+    //     key: 'Enter',
+    //     keyCode: 13
+    // }
+  ];
+  const getNormalizedKeyCode = (e) => {
+    if (e.code) {
+      const matchedNum = numKeys.find((n2) => n2.code === e.code);
+      if (matchedNum) return matchedNum.keyCode;
+    }
+    return e.keyCode;
+  };
   const SEARCH_DEBOUNCE_MS = 150;
   const SearchMenu = () => {
     const query = useOStimStore((state) => state.search.query);
@@ -8378,13 +8619,14 @@
     reactExports.useEffect(() => {
       let lastKey = null;
       const handleKeyDown = (event) => {
-        console.log("Key pressed:", event.keyCode);
-        lastKey = event.keyCode;
+        const code = getNormalizedKeyCode(event);
+        console.log("Key pressed:", code);
+        lastKey = code;
       };
-      const numKeys = [keys.keyDown, keys.keyUp, keys.keyLeft, keys.keyRight, keys.keyYes];
+      const numKeys2 = [keys.keyDown, keys.keyUp, keys.keyLeft, keys.keyRight, keys.keyYes];
       console.log("Current keys:", keys);
       const handleBeforeInput = (event) => {
-        if (lastKey !== null && numKeys.some((k2) => k2 === lastKey)) {
+        if (lastKey !== null && numKeys2.some((k2) => k2 === lastKey)) {
           console.log("Preventing input for key:", lastKey);
           event.preventDefault();
         }
@@ -8406,11 +8648,9 @@
     }, [focusBlock]);
     reactExports.useEffect(() => {
       return () => {
-        var _a;
         if (debounceRef.current !== null) {
           window.clearTimeout(debounceRef.current);
         }
-        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
       };
     }, []);
     reactExports.useEffect(() => {
@@ -8450,20 +8690,9 @@
       setSearchActiveIndex(index);
       selectSearchResult(index);
     };
-    const handleInputFocus = () => {
-      var _a;
-      {
-        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: true } }));
-      }
-    };
     const handleInputBlur = (e) => {
-      var _a;
       if (focusBlock === "menu" && !e.relatedTarget) {
         e.target.focus();
-        return;
-      }
-      {
-        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
       }
     };
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "search-panel", children: [
@@ -8483,7 +8712,6 @@
           placeholder: "Type a scene name...",
           value: query,
           onChange: handleChange,
-          onFocus: handleInputFocus,
           onBlur: handleInputBlur
         }
       ),
@@ -8526,21 +8754,19 @@
     reactExports.useEffect(() => {
       let lastKey = null;
       const handleKeyDown = (event) => {
-        lastKey = event.keyCode;
+        lastKey = getNormalizedKeyCode(event);
       };
-      const numKeys = Object.values(keys).map((k2) => k2);
+      const numKeys2 = Object.values(keys).map((k2) => k2);
       const handleBeforeInput = (event) => {
-        if (lastKey !== null && numKeys.some((k2) => k2 === lastKey)) {
+        if (lastKey !== null && numKeys2.some((k2) => k2 === lastKey)) {
           event.preventDefault();
         }
       };
       window.addEventListener("keydown", handleKeyDown, { capture: true });
       window.addEventListener("beforeinput", handleBeforeInput, { capture: true });
       return () => {
-        var _a;
         window.removeEventListener("keydown", handleKeyDown, { capture: true });
         window.removeEventListener("beforeinput", handleBeforeInput, { capture: true });
-        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
       };
     }, [keys]);
     reactExports.useEffect(() => {
@@ -8564,17 +8790,7 @@
       }
     }, [focusBlock, alignment.activeField, alignment.actorIndex]);
     const handleInputFocus = (event) => {
-      var _a;
       event.target.select();
-      {
-        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: true } }));
-      }
-    };
-    const handleInputBlur = () => {
-      var _a;
-      {
-        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
-      }
     };
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "align-panel", "aria-label": "Alignment menu", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "align-header", children: [
@@ -8648,8 +8864,7 @@
                       }));
                     }, 400);
                   }
-                },
-                onBlur: handleInputBlur
+                }
               }
             )
           ]
@@ -8673,17 +8888,68 @@
   };
   const useControls = () => {
     reactExports.useEffect(() => {
+      const mapKeyCodeToControl = (keyCode) => {
+        const { keys } = useOStimStore.getState();
+        if (keyCode === keys.keyUp) return "up";
+        if (keyCode === keys.keyDown) return "down";
+        if (keyCode === keys.keyLeft) return "left";
+        if (keyCode === keys.keyRight) return "right";
+        if (keyCode === keys.keyYes) return "yes";
+        if (keyCode === keys.keyToggle) return "toggle";
+        if (keyCode === keys.keyEnd) return "no";
+        if (keyCode === 27) return "esc";
+        if (keyCode === 9) return "tab";
+        return null;
+      };
       const handleKeyDown = (e) => {
-        console.log("Key down event:", e);
+        var _a, _b, _c, _d, _e, _f;
+        const keyCode = getNormalizedKeyCode(e);
+        const { keys } = useOStimStore.getState();
+        if (!e.repeat) {
+          if ((_a = keys.toggleFocusKeys) == null ? void 0 : _a.includes(keyCode)) {
+            e.preventDefault();
+            (_b = window.sendAction) == null ? void 0 : _b.call(window, JSON.stringify({ action: "toggleFocus" }));
+            return;
+          }
+          if ((_c = keys.toggleInspectorKeys) == null ? void 0 : _c.includes(keyCode)) {
+            e.preventDefault();
+            (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({ action: "toggleInspector" }));
+            return;
+          }
+          if (keyCode === keys.keyHideUI) {
+            e.preventDefault();
+            (_e = window.sendAction) == null ? void 0 : _e.call(window, JSON.stringify({ action: "toggleHideUI" }));
+            return;
+          }
+        }
+        const controlStr = mapKeyCodeToControl(keyCode);
+        if (controlStr) {
+          if (keyCode === 27 || keyCode === 9) {
+            e.preventDefault();
+          }
+          if (!e.repeat) {
+            (_f = window.handleControlStart) == null ? void 0 : _f.call(window, controlStr);
+          }
+        }
+      };
+      const handleKeyUp = (e) => {
+        var _a;
+        const keyCode = getNormalizedKeyCode(e);
+        const controlStr = mapKeyCodeToControl(keyCode);
+        if (controlStr) {
+          (_a = window.handleControlEnd) == null ? void 0 : _a.call(window);
+        }
       };
       const handleWheel = (e) => {
         e.preventDefault();
         window.handleControl(e.deltaY > 0 ? "up" : "down");
       };
       window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
       window.addEventListener("wheel", handleWheel, { passive: false });
       return () => {
         window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
         window.removeEventListener("wheel", handleWheel);
       };
     }, []);
@@ -8699,22 +8965,40 @@
     const containerRef = reactExports.useRef(null);
     const [indicatorStyle, setIndicatorStyle] = reactExports.useState({ opacity: 0 });
     const targetIndex = hoverIndex ?? activeIndex;
+    const updateIndicator = reactExports.useCallback(() => {
+      const el2 = buttonRefs.current[targetIndex];
+      if (!el2 || el2.offsetWidth === 0) {
+        setIndicatorStyle({ opacity: 0 });
+        return;
+      }
+      setIndicatorStyle({
+        top: el2.offsetTop,
+        left: el2.offsetLeft,
+        width: el2.offsetWidth,
+        height: el2.offsetHeight,
+        opacity: 1
+      });
+    }, [targetIndex]);
     reactExports.useLayoutEffect(() => {
-      setTimeout(() => {
-        const el2 = buttonRefs.current[targetIndex];
-        if (!el2) {
-          setIndicatorStyle({ opacity: 0 });
-          return;
-        }
-        setIndicatorStyle({
-          top: el2.offsetTop,
-          left: el2.offsetLeft,
-          width: el2.offsetWidth,
-          height: el2.offsetHeight,
-          opacity: 1
-        });
-      }, 0);
-    }, [targetIndex, controlButtons]);
+      updateIndicator();
+      const id2 = setTimeout(updateIndicator, 0);
+      return () => clearTimeout(id2);
+    }, [updateIndicator, controlButtons]);
+    reactExports.useEffect(() => {
+      const observer = new ResizeObserver(updateIndicator);
+      if (containerRef.current) {
+        observer.observe(containerRef.current);
+      }
+      const el2 = buttonRefs.current[targetIndex];
+      if (el2) {
+        observer.observe(el2);
+      }
+      document.addEventListener("visibilitychange", updateIndicator);
+      return () => {
+        observer.disconnect();
+        document.removeEventListener("visibilitychange", updateIndicator);
+      };
+    }, [updateIndicator, targetIndex]);
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { ref: containerRef, className: `control-buttons ${focusBlock === "buttons" ? "focused" : ""}`, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "control-button-indicator", style: indicatorStyle }),
       controlButtons.map((button, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -8949,7 +9233,12 @@
       const convertedKeys = {};
       for (const key in parsed) {
         if (Object.prototype.hasOwnProperty.call(parsed, key)) {
-          convertedKeys[key] = convertScanCodeToJS(parsed[key]);
+          const val = parsed[key];
+          if (Array.isArray(val)) {
+            convertedKeys[key] = val.map((code) => convertScanCodeToJS(code));
+          } else {
+            convertedKeys[key] = convertScanCodeToJS(val);
+          }
         }
       }
       console.log("updateKeys converted:", convertedKeys);

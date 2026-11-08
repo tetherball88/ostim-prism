@@ -11,13 +11,14 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
     updateActiveMenu: (menu: ActiveMenu) => set((state) => {
         const prevMenu = state.activeMenu;
         console.log(`Updating active menu from ${prevMenu} to ${menu}`);
-        if(prevMenu === 'alignMenu' || prevMenu === 'searchMenu') {
+        const wasFocusedMenu = prevMenu === 'alignMenu' || prevMenu === 'searchMenu';
+        const isFocusedMenu = menu === 'alignMenu' || menu === 'searchMenu';
+        if (wasFocusedMenu && !isFocusedMenu) {
             window.sendAction?.(JSON.stringify({
                 action: 'focus',
                 payload: { shouldFocus: false }
             }));
-        }
-        if(menu === 'alignMenu' || menu === 'searchMenu') {
+        } else if (!wasFocusedMenu && isFocusedMenu) {
             window.sendAction?.(JSON.stringify({
                 action: 'focus',
                 payload: { shouldFocus: true }
@@ -42,6 +43,9 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
             else if (lowerCaseControl === 'down') state.moveControlButtonsFocus(-1);
             else if (lowerCaseControl === 'yes') state.updateActiveMenu(state.controlButtons.buttons[state.controlButtons.activeIndex]?.id || 'navigation');
             else if (lowerCaseControl === 'right') state.setFocusBlock('menu');
+            else if (lowerCaseControl === 'esc' && (activeMenu === 'alignMenu' || activeMenu === 'searchMenu')) {
+                state.updateActiveMenu('navigation');
+            }
         } else {
             if (activeMenu === 'alignMenu') {
                 const activeFieldIdx = state.alignment.activeField;

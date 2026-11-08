@@ -35,8 +35,12 @@ export function setupGameIntegration(store: StoreState) {
         // Convert scan codes to JS key codes
         for (const key in parsed) {
             if (Object.prototype.hasOwnProperty.call(parsed, key)) {
-                // We assume all values in Keys are numbers (scan codes)
-                convertedKeys[key] = convertScanCodeToJS(parsed[key]);
+                const val = parsed[key];
+                if (Array.isArray(val)) {
+                    convertedKeys[key] = val.map((code: number) => convertScanCodeToJS(code));
+                } else {
+                    convertedKeys[key] = convertScanCodeToJS(val);
+                }
             }
         }
         

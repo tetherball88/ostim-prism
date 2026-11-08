@@ -32,7 +32,7 @@ export default defineConfig({
     }),
   ],
   build: {
-    outDir: resolve(__dirname, '../PrismaUI/views/OStim'),
+    outDir: resolve(__dirname, '../Magelight/OStimPrism/views/OStim'),
     emptyOutDir: true,
     minify: false,
     cssCodeSplit: false,

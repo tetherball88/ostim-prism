@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useOStimStore } from "../../store";
 import { isInGame } from "../../utils/isInGame";
 import { alignmentFields } from "../../alignmentConfig";
+import { getNormalizedKeyCode } from "../../utils/keys";
 import "./AlignmentMenu.styles.css";
 
 export const AlignmentMenu = () => {
@@ -24,7 +25,7 @@ export const AlignmentMenu = () => {
     let lastKey: null | number = null;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      lastKey = event.keyCode;
+      lastKey = getNormalizedKeyCode(event);
     }
 
     const numKeys: number[] = Object.values(keys).map(k => k);
@@ -40,7 +41,6 @@ export const AlignmentMenu = () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       // window.removeEventListener("keyup", handleKeyUp, { capture: true });
       window.removeEventListener("beforeinput", handleBeforeInput, { capture: true });
-      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
     }
   }, [keys])
 
@@ -84,15 +84,6 @@ export const AlignmentMenu = () => {
 
   const handleInputFocus = (event: React.FocusEvent<HTMLInputElement>) => {
     event.target.select();
-    if (isInGame()) {
-      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: true } }));
-    }
-  };
-
-  const handleInputBlur = () => {
-    if (isInGame()) {
-      window.sendAction?.(JSON.stringify({ action: "setTextInputFocus", payload: { focused: false } }));
-    }
   };
 
   return (
@@ -154,7 +145,6 @@ export const AlignmentMenu = () => {
                   }, 400);
                 }
               }}
-              onBlur={handleInputBlur}
             />
           </div>
         ))}

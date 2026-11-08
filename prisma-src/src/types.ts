@@ -77,6 +77,8 @@ export interface Keys {
   keyAutoMode: number;
   keyFreeCam: number;
   keyHideUI: number;
+  toggleFocusKeys?: number[];
+  toggleInspectorKeys?: number[];
 }
 
 declare global {

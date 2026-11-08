@@ -8,7 +8,6 @@
 #include "src/PrismaUIManager.h"
 #include "src/Settings.h"
 #include "src/Papyrus.h"
-#include "src/KeyboardInputBlocker.h"
 
 using namespace SKSE;
 
@@ -72,12 +71,7 @@ SKSEPluginLoad(const LoadInterface* skse) {
                 switch (message->type) {
                     case SKSE::MessagingInterface::kPreLoadGame:
                         SKSE::log::info("PreLoadGame...");
-                        PrismaUIManager::GetSingleton()->Destroy();
-                        break;
-
-                    case SKSE::MessagingInterface::kInputLoaded:
-                        SKSE::log::info("Input loaded — installing keyboard blocker hook...");
-                        KeyboardInputBlocker::Install();
+                        PrismaUIManager::GetSingleton()->Hide();
                         break;
 
                     case SKSE::MessagingInterface::kPostLoadGame:
@@ -92,7 +86,7 @@ SKSEPluginLoad(const LoadInterface* skse) {
                         // Load settings
                         Settings::GetSingleton()->Load();
 
-                        // Initialize OStim data provider and PrismaUI manager
+                        // Initialize OStim data provider and Magelight UI manager
                         OStimDataProvider::GetSingleton()->Initialize();
 
                         PrismaUIManager::GetSingleton()->Initialize();
@@ -102,12 +96,12 @@ SKSEPluginLoad(const LoadInterface* skse) {
                         if (threadAPI) {
                             threadAPI->RegisterEventCallback(PrismaUIManager::OnThreadEvent, nullptr);
                             
-                            // Only disable OStim's Flash UI if PrismaUI is actually available
+                            // Only disable OStim's Flash UI if Magelight UI is actually available
                             if (PrismaUIManager::GetSingleton()->IsAvailable()) {
                                 threadAPI->SetExternalUIEnabled(true);
-                                SKSE::log::info("Registered OStim callbacks and enabled external UI (PrismaUI available)");
+                                SKSE::log::info("Registered OStim callbacks and enabled external UI (Magelight UI available)");
                             } else {
-                                SKSE::log::warn("PrismaUI not available, OStim Flash UI will be used");
+                                SKSE::log::warn("Magelight UI not available, OStim Flash UI will be used");
                             }
                         } else {
                             SKSE::log::error("Failed to get OStim Thread API");

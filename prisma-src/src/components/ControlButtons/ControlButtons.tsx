@@ -1,4 +1,4 @@
-import { CSSProperties, FC, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, FC, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useOStimStore } from "../../store";
 import { Icon } from "../Icon/Icon";
 
@@ -18,20 +18,42 @@ export const ControlButtons: FC = () => {
 
     const targetIndex = hoverIndex ?? activeIndex;
 
+    const updateIndicator = useCallback(() => {
+        const el = buttonRefs.current[targetIndex];
+        if (!el || el.offsetWidth === 0) {
+            setIndicatorStyle({ opacity: 0 });
+            return;
+        }
+        setIndicatorStyle({
+            top: el.offsetTop,
+            left: el.offsetLeft,
+            width: el.offsetWidth,
+            height: el.offsetHeight,
+            opacity: 1,
+        });
+    }, [targetIndex]);
+
     useLayoutEffect(() => {
-        setTimeout(() => {
-            const el = buttonRefs.current[targetIndex];
-            if (!el) { setIndicatorStyle({ opacity: 0 }); return; }
-            setIndicatorStyle({
-                top: el.offsetTop,
-                left: el.offsetLeft,
-                width: el.offsetWidth,
-                height: el.offsetHeight,
-                opacity: 1,
-            });
-        }, 0)
-        
-    }, [targetIndex, controlButtons]);
+        updateIndicator();
+        const id = setTimeout(updateIndicator, 0);
+        return () => clearTimeout(id);
+    }, [updateIndicator, controlButtons]);
+
+    useEffect(() => {
+        const observer = new ResizeObserver(updateIndicator);
+        if (containerRef.current) {
+            observer.observe(containerRef.current);
+        }
+        const el = buttonRefs.current[targetIndex];
+        if (el) {
+            observer.observe(el);
+        }
+        document.addEventListener('visibilitychange', updateIndicator);
+        return () => {
+            observer.disconnect();
+            document.removeEventListener('visibilitychange', updateIndicator);
+        };
+    }, [updateIndicator, targetIndex]);
 
     return (
         <div ref={containerRef} className={`control-buttons ${focusBlock === 'buttons' ? 'focused' : ''}`}>

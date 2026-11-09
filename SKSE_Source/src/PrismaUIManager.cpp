@@ -1,4 +1,5 @@
 #include "PrismaUIManager.h"
+#include "PortraitManager.h"
 #include "Settings.h"
 #include <thread>
 #include <chrono>
@@ -412,8 +413,9 @@ void PrismaUIManager::Show() {
     ApplyVisibility();
 
     magelight->InvokeJS(view, "showMenu('navigation')");
+    UpdateSettings();
     UpdateNavigation();
-    UpdateExcitements();
+    UpdateExcitements(true);
     UpdateOptions();
     UpdateThreadStatus();
     UpdateKeys();
@@ -581,7 +583,32 @@ void PrismaUIManager::UpdateKeys()
     SKSE::log::info("Sent key update to UI");
 }
 
-void PrismaUIManager::UpdateExcitements() {
+void PrismaUIManager::UpdateSettings()
+{
+    if (!IsViewValid()) return;
+
+    auto* settings = Settings::GetSingleton();
+    settings->Load();
+
+    json j = {
+        {"enableGridMenu", settings->enableGridMenu},
+        {"gridColumns", settings->gridColumns},
+        {"gridRows", settings->gridRows},
+        {"mainBlockX", settings->mainBlockX},
+        {"mainBlockY", settings->mainBlockY},
+        {"mainBlockScale", settings->mainBlockScale},
+        {"excitementBlockX", settings->excitementBlockX},
+        {"excitementBlockY", settings->excitementBlockY},
+        {"excitementBlockScale", settings->excitementBlockScale}
+    };
+
+    std::string script = "updateSettings(" + j.dump() + ")";
+    magelight->InvokeJS(view, script.c_str());
+    SKSE::log::info("Sent settings update to UI (enableGridMenu={}, gridColumns={}, gridRows={})",
+        settings->enableGridMenu, settings->gridColumns, settings->gridRows);
+}
+
+void PrismaUIManager::UpdateExcitements(bool forceResendPortraits) {
     if (!IsViewValid()) {
         return;
     }
@@ -601,6 +628,7 @@ void PrismaUIManager::UpdateExcitements() {
     json actorsJson = json::array();
     for (const auto& actor : actors) {
         actorsJson.push_back({
+            {"formId", actor.formId},
             {"name", actor.name},
             {"excitementProgress", actor.excitementProgress},
             {"staminaProgress", actor.staminaProgress},
@@ -612,6 +640,23 @@ void PrismaUIManager::UpdateExcitements() {
 
     std::string script = "updateExcitements(" + actorsJson.dump() + ")";
     magelight->InvokeJS(view, script.c_str());
+
+    PortraitManager::GetSingleton()->SyncActors(actors, forceResendPortraits);
+}
+
+void PrismaUIManager::SendActorPortrait(uint32_t formId, const std::string& dataUrl) {
+    if (!IsViewValid()) {
+        return;
+    }
+    std::string script = "updateActorPortrait(" + std::to_string(formId) + "," + json(dataUrl).dump() + ")";
+    magelight->InvokeJS(view, script.c_str());
+}
+
+void PrismaUIManager::ClearActorPortraits() {
+    if (!IsViewValid()) {
+        return;
+    }
+    magelight->InvokeJS(view, "clearActorPortraits()");
 }
 
 void PrismaUIManager::UpdateNavigation() {
@@ -721,6 +766,7 @@ void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, 
             case OstimNG_API::Thread::ThreadEvent::ThreadStarted:
                 SKSE::log::info("Thread started: {}", threadID);
                 manager->currentThreadID = threadID;
+                PortraitManager::GetSingleton()->OnSceneChanged();
                 SetCrosshairTarget(false);
                 manager->Show();
                 break;
@@ -757,12 +803,13 @@ void PrismaUIManager::OnMagelightEvent(const MAGELIGHT_API::EventData* ev, void*
             SKSE::log::info("Magelight view {} {}: syncing state",
                 ev->view, ev->type == MAGELIGHT_API::Event::ViewDomReady ? "DOM ready" : "reloaded");
 
+            manager->UpdateSettings();
             manager->UpdateKeys();
             manager->magelight->InvokeJS(ev->view, "setGameReady()");
 
             if (manager->currentThreadID != INVALID_THREAD_ID) {
                 manager->UpdateNavigation();
-                manager->UpdateExcitements();
+                manager->UpdateExcitements(true);
                 manager->UpdateOptions();
                 manager->UpdateThreadStatus();
                 manager->ResetIdleTimer();
@@ -1068,6 +1115,18 @@ void PrismaUIManager::HandleActionOnGameThread(const std::string& data) {
             ToggleInspector();
         } else if (action == "toggleHideUI") {
             ToggleHideUI();
+        } else if (action == "saveLayout") {
+            auto payload = actionData.value("payload", json::object());
+            auto* settings = Settings::GetSingleton();
+            int mainX = payload.value("mainBlockX", settings->mainBlockX);
+            int mainY = payload.value("mainBlockY", settings->mainBlockY);
+            int mainScale = payload.value("mainBlockScale", settings->mainBlockScale);
+            int exciteX = payload.value("excitementBlockX", settings->excitementBlockX);
+            int exciteY = payload.value("excitementBlockY", settings->excitementBlockY);
+            int exciteScale = payload.value("excitementBlockScale", settings->excitementBlockScale);
+            int cols = payload.value("gridColumns", settings->gridColumns);
+            int rows = payload.value("gridRows", settings->gridRows);
+            settings->SaveLayout(mainX, mainY, mainScale, exciteX, exciteY, exciteScale, cols, rows);
         } else {
             SKSE::log::warn("Magelight UI unknown action: {}", action);
         }

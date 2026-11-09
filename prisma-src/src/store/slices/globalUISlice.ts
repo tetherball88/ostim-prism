@@ -1,13 +1,80 @@
 // src/store/slices/globalUISlice.ts
-import { ActiveMenu, FocusedBlock } from '../../types';
+import { ActiveMenu, FocusedBlock, UISettings } from '../../types';
 import { StoreSlice } from '../types';
 import { alignmentFields, alignmentStepMap } from '../../alignmentConfig';
+import { isInGame } from '../../utils/isInGame';
+
+const DEV_STORAGE_KEY = 'ostim_prism_layout_settings';
+
+function getInitialSettings(): UISettings {
+    const defaults: UISettings = {
+        enableGridMenu: true,
+        gridColumns: 4,
+        gridRows: 4,
+        mainBlockX: -1,
+        mainBlockY: -1,
+        mainBlockScale: 100,
+        excitementBlockX: -1,
+        excitementBlockY: -1,
+        excitementBlockScale: 100,
+    };
+    if (!isInGame()) {
+        try {
+            const raw = localStorage.getItem(DEV_STORAGE_KEY);
+            if (raw) {
+                return { ...defaults, ...JSON.parse(raw) };
+            }
+        } catch {
+            // ignore storage errors
+        }
+    }
+    return defaults;
+}
 
 export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> = (set, get) => ({
     activeMenu: 'navigation',
     focusBlock: 'menu',
     navigatingAt: 0,
     gameReady: false,
+    settings: getInitialSettings(),
+    updateSettings: (newSettings) => set((state) => {
+        const merged: UISettings = {
+            ...state.settings,
+            ...newSettings,
+            gridColumns: Math.max(1, Math.min(12, Number(newSettings.gridColumns ?? state.settings.gridColumns) || 4)),
+            gridRows: Math.max(1, Math.min(12, Number(newSettings.gridRows ?? state.settings.gridRows) || 4)),
+            mainBlockScale: Math.max(30, Math.min(250, Number(newSettings.mainBlockScale ?? state.settings.mainBlockScale) || 100)),
+            excitementBlockScale: Math.max(30, Math.min(250, Number(newSettings.excitementBlockScale ?? state.settings.excitementBlockScale) || 100)),
+        };
+        return { settings: merged };
+    }),
+    saveLayoutSettings: (newSettings, commit = true) => {
+        get().updateSettings(newSettings);
+        if (commit) {
+            const { settings } = get();
+            const payload = {
+                mainBlockX: settings.mainBlockX,
+                mainBlockY: settings.mainBlockY,
+                mainBlockScale: settings.mainBlockScale,
+                excitementBlockX: settings.excitementBlockX,
+                excitementBlockY: settings.excitementBlockY,
+                excitementBlockScale: settings.excitementBlockScale,
+                gridColumns: settings.gridColumns,
+                gridRows: settings.gridRows,
+            };
+            window.sendAction?.(JSON.stringify({
+                action: 'saveLayout',
+                payload,
+            }));
+            if (!isInGame()) {
+                try {
+                    localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(settings));
+                } catch {
+                    // ignore storage errors
+                }
+            }
+        }
+    },
     updateActiveMenu: (menu: ActiveMenu) => set((state) => {
         const prevMenu = state.activeMenu;
         console.log(`Updating active menu from ${prevMenu} to ${menu}`);
@@ -104,15 +171,45 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 }
                 else if (lowerCaseControl === 'yes') state.selectSearchResult();
             } else if (activeMenu === 'navigation') {
-                if (lowerCaseControl === 'up') state.moveNavigationFocus(1);
-                else if (lowerCaseControl === 'down') state.moveNavigationFocus(-1);
-                else if (lowerCaseControl === 'left') state.setFocusBlock('buttons');
-                else if (lowerCaseControl === 'yes') state.selectNavigationOption();
+                if (state.settings.enableGridMenu) {
+                    if (lowerCaseControl === 'up' || lowerCaseControl === 'down' || lowerCaseControl === 'right') {
+                        state.moveNavigationGridFocus(lowerCaseControl);
+                    } else if (lowerCaseControl === 'left') {
+                        const moved = state.moveNavigationGridFocus('left');
+                        if (!moved) state.setFocusBlock('buttons');
+                    } else if (lowerCaseControl === 'wheelup') {
+                        state.moveNavigationFocus(1);
+                    } else if (lowerCaseControl === 'wheeldown') {
+                        state.moveNavigationFocus(-1);
+                    } else if (lowerCaseControl === 'yes') {
+                        state.selectNavigationOption();
+                    }
+                } else {
+                    if (lowerCaseControl === 'up' || lowerCaseControl === 'wheelup') state.moveNavigationFocus(1);
+                    else if (lowerCaseControl === 'down' || lowerCaseControl === 'wheeldown') state.moveNavigationFocus(-1);
+                    else if (lowerCaseControl === 'left') state.setFocusBlock('buttons');
+                    else if (lowerCaseControl === 'yes') state.selectNavigationOption();
+                }
             } else if (activeMenu === 'utilityOptions') {
-                if (lowerCaseControl === 'up') state.moveUtilityOptionsFocus(1);
-                else if (lowerCaseControl === 'down') state.moveUtilityOptionsFocus(-1);
-                else if (lowerCaseControl === 'left') state.setFocusBlock('buttons');
-                else if (lowerCaseControl === 'yes') state.selectUtilityOption();
+                if (state.settings.enableGridMenu) {
+                    if (lowerCaseControl === 'up' || lowerCaseControl === 'down' || lowerCaseControl === 'right') {
+                        state.moveUtilityOptionsGridFocus(lowerCaseControl);
+                    } else if (lowerCaseControl === 'left') {
+                        const moved = state.moveUtilityOptionsGridFocus('left');
+                        if (!moved) state.setFocusBlock('buttons');
+                    } else if (lowerCaseControl === 'wheelup') {
+                        state.moveUtilityOptionsFocus(1);
+                    } else if (lowerCaseControl === 'wheeldown') {
+                        state.moveUtilityOptionsFocus(-1);
+                    } else if (lowerCaseControl === 'yes') {
+                        state.selectUtilityOption();
+                    }
+                } else {
+                    if (lowerCaseControl === 'up' || lowerCaseControl === 'wheelup') state.moveUtilityOptionsFocus(1);
+                    else if (lowerCaseControl === 'down' || lowerCaseControl === 'wheeldown') state.moveUtilityOptionsFocus(-1);
+                    else if (lowerCaseControl === 'left') state.setFocusBlock('buttons');
+                    else if (lowerCaseControl === 'yes') state.selectUtilityOption();
+                }
             }
         }
     },

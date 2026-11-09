@@ -7,7 +7,11 @@ import { ListOption } from "../../types";
 const HOVER_SUPPRESS_MS = 150;
 
 // Base values in em units (relative to container font-size)
-const ITEM_HEIGHT_EM = 4;   // 4em = 64px at 16px base
+const ITEM_HEIGHT_EM = 4;     // 4em = 64px at 16px base
+const GRID_CELL_EM = 4.25;    // 4em icon + 0.125em (2px) internal padding on each side
+const GRID_GAP_EM = 0;        // 0 gap so hitboxes are 100% contiguous with no dead zones between items
+const GRID_PAD_EM = 0.15;     // compact outer padding around grid cells
+const MAX_VISIBLE_GRID_ROWS = 4;
 
 interface ListProps {
   options: ListOption[];
@@ -17,22 +21,31 @@ interface ListProps {
 }
 
 export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, selectOption }) => {
+  const enableGridMenu = useOStimStore(state => state.settings.enableGridMenu);
+  const gridColumns = useOStimStore(state => state.settings.gridColumns);
+  const gridRows = useOStimStore(state => state.settings.gridRows);
   const [visibleCount, setVisibleCount] = useState(5); // will be calculated
+  const [fontSizePx, setFontSizePx] = useState(16);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const windowRef = useRef<HTMLDivElement | null>(null);
 
   // Compute actual pixel height based on container's font-size
+  const getFontSize = () => {
+    if (!windowRef.current) return fontSizePx;
+    return parseFloat(getComputedStyle(windowRef.current).fontSize) || 16;
+  };
+
   const getItemHeight = () => {
-    if (!windowRef.current) return 64; // fallback
-    const fontSize = parseFloat(getComputedStyle(windowRef.current).fontSize);
-    return ITEM_HEIGHT_EM * fontSize;
+    return ITEM_HEIGHT_EM * getFontSize();
   };
 
   // Calculate visible count from container height
   const updateVisibleCount = useCallback(() => {
     if (!windowRef.current) return;
+    const fs = parseFloat(getComputedStyle(windowRef.current).fontSize) || 16;
+    setFontSizePx(fs);
     const containerHeight = windowRef.current.clientHeight;
-    const itemHeight = getItemHeight();
+    const itemHeight = ITEM_HEIGHT_EM * fs;
     const count = Math.floor(containerHeight / itemHeight);
     setVisibleCount(Math.max(1, count));
   }, []);
@@ -45,7 +58,7 @@ export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, 
       observer.observe(windowRef.current);
     }
     return () => observer.disconnect();
-  }, [updateVisibleCount]);
+  }, [updateVisibleCount, enableGridMenu, gridColumns, gridRows, options.length]);
 
   useEffect(() => {
     setHoverIndex(null);
@@ -89,7 +102,118 @@ export const List: FC<ListProps> = ({ options, activeIndex, setListActiveIndex, 
   };
 
   const { containerTransform, selectorPosition } = getScrollPositions();
-  const renderedIndex = hoverIndex ?? activeIndex;
+  const renderedIndex = Math.max(0, Math.min(options.length - 1, hoverIndex ?? activeIndex));
+
+  if (enableGridMenu) {
+    const cols = Math.max(1, gridColumns || 4);
+    const maxVisibleRows = Math.max(1, gridRows || MAX_VISIBLE_GRID_ROWS);
+    const totalRows = Math.max(1, Math.ceil(options.length / cols));
+    const visibleRows = Math.min(totalRows, maxVisibleRows);
+
+    const rowStrideEm = GRID_CELL_EM + GRID_GAP_EM;
+    const hasOverflow = totalRows > maxVisibleRows;
+    // Show ~half of the next hidden row so it's immediately obvious the grid is scrollable
+    const peekEm = hasOverflow ? (GRID_CELL_EM * 0.55) : 0;
+
+    // Active row scrolling (row 0 at bottom, row totalRows-1 at top)
+    const activeLogicalRow = Math.floor(activeIndex / cols);
+    const activeVisualRow = totalRows - 1 - activeLogicalRow;
+    const centerRow = Math.floor((visibleRows - 1) / 2);
+    const maxRowOffset = Math.max(0, totalRows - visibleRows);
+    const idealRowOffset = activeVisualRow - centerRow;
+    const rowOffset = Math.max(0, Math.min(idealRowOffset, maxRowOffset));
+
+    const isTopVisible = rowOffset === 0;
+    const isBottomVisible = rowOffset >= maxRowOffset;
+
+    // Distribute the peek space: at bottom, peek is at the top edge; at top, peek is at the bottom edge;
+    // in the middle, split peek between top and bottom edges while keeping windowHeightEm constant.
+    const topShiftEm = !hasOverflow
+      ? 0
+      : isBottomVisible
+        ? peekEm
+        : isTopVisible
+          ? 0
+          : peekEm * 0.5;
+
+    const gridTransformYEm = -rowOffset * rowStrideEm + topShiftEm;
+
+    // 2D selector coordinates for renderedIndex (hover or active) in em units
+    const selLogicalRow = Math.floor(renderedIndex / cols);
+    const selVisualRow = totalRows - 1 - selLogicalRow;
+    const selCol = renderedIndex % cols;
+    const selectorXEm = GRID_PAD_EM + selCol * rowStrideEm;
+    const selectorYEm = GRID_PAD_EM + (selVisualRow - rowOffset) * rowStrideEm + topShiftEm;
+
+    const baseWindowHeightEm = visibleRows * GRID_CELL_EM + Math.max(0, visibleRows - 1) * GRID_GAP_EM + 2 * GRID_PAD_EM;
+    const windowHeightEm = baseWindowHeightEm + peekEm;
+    const activeOption = options[renderedIndex];
+
+    return (
+      <div className="grid-menu">
+        {options.length > 0 && (
+          <>
+            <div
+              className={`grid-window ${isTopVisible ? 'top' : ''} ${isBottomVisible ? 'bottom' : ''}`}
+              style={{ height: `${windowHeightEm}em` }}
+              ref={windowRef}
+              onMouseLeave={() => setHoverIndex(null)}
+            >
+              <div
+                className="grid-selector"
+                style={{ transform: `translate(${selectorXEm}em, ${selectorYEm}em)` }}
+              />
+              <div
+                className="grid-container"
+                role="listbox"
+                style={{
+                  gridTemplateColumns: `repeat(${cols}, ${GRID_CELL_EM}em)`,
+                  gridTemplateRows: `repeat(${totalRows}, ${GRID_CELL_EM}em)`,
+                  gap: `${GRID_GAP_EM}em`,
+                  padding: `${GRID_PAD_EM}em`,
+                  transform: `translateY(${gridTransformYEm}em)`,
+                }}
+              >
+                {options.map((opt, idx) => {
+                  const logicalRow = Math.floor(idx / cols);
+                  const visualRow = totalRows - 1 - logicalRow;
+                  const col = idx % cols;
+                  return (
+                    <div
+                      key={opt.id + opt.description + opt.iconPath + idx}
+                      className={`grid-item ${idx === renderedIndex ? 'active' : ''}`}
+                      style={{
+                        gridRowStart: visualRow + 1,
+                        gridColumnStart: col + 1,
+                      }}
+                      onMouseEnter={() => {
+                        if (Date.now() - useOStimStore.getState().navigatingAt < HOVER_SUPPRESS_MS) return;
+                        setHoverIndex(idx);
+                      }}
+                      onClick={() => {
+                        setListActiveIndex(idx);
+                        selectOption(idx);
+                      }}
+                    >
+                      <Icon base64Data={opt.iconData} path={opt.iconPath} size="var(--control-buttons-size)" />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Option A — Left-Accent Pedestal bottom item name bar */}
+            <div className="grid-pedestal">
+              <p className="grid-pedestal-label">{activeOption?.description || ''}</p>
+              <span className="grid-pedestal-count">
+                {String(renderedIndex + 1).padStart(2, '0')} / {String(options.length).padStart(2, '0')}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>

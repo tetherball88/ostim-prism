@@ -21,11 +21,14 @@ public:
     void Show();
     void Hide();
 
-    void UpdateExcitements();
+    void UpdateExcitements(bool forceResendPortraits = false);
     void UpdateNavigation();
     void UpdateOptions();
     void UpdateThreadStatus();
     void UpdateKeys();
+    void UpdateSettings();
+    void SendActorPortrait(uint32_t formId, const std::string& dataUrl);
+    void ClearActorPortraits();
     void PollUpdate(uint64_t generation);
 
     bool IsAvailable() const { return magelight != nullptr && modId != 0; }

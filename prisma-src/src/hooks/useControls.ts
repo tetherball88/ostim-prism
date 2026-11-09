@@ -20,6 +20,10 @@ export const useControls = () => {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains('block-scale-input')) {
+        return;
+      }
+
       if (!isInGame()) {
         if (e.code === 'Numpad8' || e.code === 'ArrowUp') { e.preventDefault(); window.handleControl('up'); }
         if (e.code === 'Numpad5' || e.code === 'ArrowDown') { e.preventDefault(); window.handleControl('down'); }
@@ -75,7 +79,12 @@ export const useControls = () => {
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      window.handleControl(e.deltaY > 0 ? 'up' : 'down');
+      const { focusBlock, activeMenu, settings } = useOStimStore.getState();
+      if (focusBlock === 'menu' && (activeMenu === 'navigation' || activeMenu === 'utilityOptions') && settings.enableGridMenu) {
+        window.handleControl(e.deltaY > 0 ? 'wheelup' : 'wheeldown');
+      } else {
+        window.handleControl(e.deltaY > 0 ? 'up' : 'down');
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);

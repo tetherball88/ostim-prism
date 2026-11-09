@@ -5,6 +5,7 @@
 #include "PCH.h"
 #include "src/OstimNG-API-Thread.h"
 #include "src/OStimDataProvider.h"
+#include "src/PortraitManager.h"
 #include "src/PrismaUIManager.h"
 #include "src/Settings.h"
 #include "src/Papyrus.h"
@@ -72,12 +73,13 @@ SKSEPluginLoad(const LoadInterface* skse) {
                     case SKSE::MessagingInterface::kPreLoadGame:
                         SKSE::log::info("PreLoadGame...");
                         PrismaUIManager::GetSingleton()->Hide();
+                        PortraitManager::GetSingleton()->OnGameLoad();
                         break;
 
                     case SKSE::MessagingInterface::kPostLoadGame:
                     case SKSE::MessagingInterface::kNewGame:
                         SKSE::log::info("New game/Load...");
-                        
+                        PortraitManager::GetSingleton()->OnGameLoad();
                         break;
 
                     case SKSE::MessagingInterface::kDataLoaded: {
@@ -86,10 +88,11 @@ SKSEPluginLoad(const LoadInterface* skse) {
                         // Load settings
                         Settings::GetSingleton()->Load();
 
-                        // Initialize OStim data provider and Magelight UI manager
+                        // Initialize OStim data provider, Magelight UI manager, and optional Phantasm portraits
                         OStimDataProvider::GetSingleton()->Initialize();
 
                         PrismaUIManager::GetSingleton()->Initialize();
+                        PortraitManager::GetSingleton()->Initialize();
 
                         // Register event callback with OStim Thread API
                         auto threadAPI = OstimNG_API::Thread::GetAPI("OStim Prism", REL::Version(1, 0, 0));

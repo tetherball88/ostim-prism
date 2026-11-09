@@ -1,5 +1,7 @@
 import { StateCreator } from 'zustand';
-import { ActiveMenu, ActorStats, ControlButtons, FocusedBlock, ListOption, SearchResult, AlignmentData, AlignmentPayload, ThreadStatus, Keys } from '../types';
+import { ActiveMenu, ActorStats, ControlButtons, FocusedBlock, ListOption, SearchResult, AlignmentData, AlignmentPayload, ThreadStatus, Keys, UISettings } from '../types';
+
+export type GridDirection = 'up' | 'down' | 'left' | 'right';
 
 export interface NavigationSlice {
     navigation: {
@@ -10,6 +12,7 @@ export interface NavigationSlice {
     setNavigationActiveIndex: (index: number) => void;
     selectNavigationOption: (index?: number) => void;
     moveNavigationFocus: (direction: number) => void;
+    moveNavigationGridFocus: (direction: GridDirection) => boolean;
 }
 
 export interface UtilityOptionsSlice {
@@ -21,6 +24,7 @@ export interface UtilityOptionsSlice {
     setUtilityOptionsActiveIndex: (index: number) => void;
     selectUtilityOption: (index?: number) => void;
     moveUtilityOptionsFocus: (direction: number) => void;
+    moveUtilityOptionsGridFocus: (direction: GridDirection) => boolean;
 }
 
 export interface ControlButtonsSlice {
@@ -75,6 +79,9 @@ export interface ActorStatsSlice {
     updateActorsState: (actorsState: ActorStats[]) => void;
     orgasmPinnedUntil: number[];
     pinActorOrgasm: (index: number) => void;
+    actorPortraits: Record<number, string>;
+    updateActorPortrait: (formId: number, dataUrl: string) => void;
+    clearActorPortraits: () => void;
 }
 
 export interface ThreadStatusSlice {
@@ -88,6 +95,9 @@ export interface GlobalUISlice {
     focusBlock: FocusedBlock;
     navigatingAt: number;
     gameReady: boolean;
+    settings: UISettings;
+    updateSettings: (settings: Partial<UISettings>) => void;
+    saveLayoutSettings: (settings: Partial<UISettings>, commit?: boolean) => void;
     updateActiveMenu: (menu: ActiveMenu) => void;
     setFocusBlock: (block: FocusedBlock) => void;
     handleControlInput: (control: string) => void;

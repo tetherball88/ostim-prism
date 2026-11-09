@@ -1,4 +1,5 @@
 export interface ActorStats {
+    formId?: number;
     name: string;
     excitementProgress: number;
     gender: 'male' | 'female' | 'neither';
@@ -59,6 +60,18 @@ export interface ThreadStatus {
     maxSpeed: number;
 }
 
+export interface UISettings {
+    enableGridMenu: boolean;
+    gridColumns: number;
+    gridRows: number;
+    mainBlockX: number;
+    mainBlockY: number;
+    mainBlockScale: number;
+    excitementBlockX: number;
+    excitementBlockY: number;
+    excitementBlockScale: number;
+}
+
 export interface Keys {
   keyUp: number;
   keyDown: number;
@@ -89,12 +102,18 @@ declare global {
         updateOptions(utilityOptions: ListOption[] | string): void;
         /** Called by Skyrim to update key bindings. */
         updateKeys(keys: Keys | string): void;
+        /** Called by Skyrim to update UI layout settings from OStimPrism.ini. */
+        updateSettings(settings: UISettings | string): void;
         /** Called by Skyrim to update search results. */
         updateSearchResults(results: SearchResult[] | string): void;
         /** Called by Skyrim to update alignment data. */
         updateAlignment(payload: AlignmentPayload | string): void;
         /** Called by Skyrim to update actor excitement/stamina state. */
         updateExcitements(data: ActorStats[] | string): void;
+        /** Called by Skyrim when an actor's 3D portrait data URL is ready (Phantasm). */
+        updateActorPortrait(formId: number, dataUrl: string): void;
+        /** Called by Skyrim on save load / new game to clear cached actor portraits. */
+        clearActorPortraits(): void;
         /** Called by Skyrim when an actor orgasms — excitement is pinned to 100 for 2s. */
         onActorOrgasm(actorIndex: number): void;
         /** Called by Skyrim to update thread control state and speed. */

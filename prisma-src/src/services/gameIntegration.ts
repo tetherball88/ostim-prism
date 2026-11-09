@@ -1,6 +1,6 @@
 import { useOStimStore } from '../store';
 import { StoreState } from '../store/types';
-import { ActiveMenu, AlignmentPayload, SearchResult, ThreadStatus } from '../types';
+import { ActiveMenu, AlignmentPayload, SearchResult, ThreadStatus, UISettings } from '../types';
 import { convertScanCodeToJS } from '../utils/scanCodeMap';
 
 export function setupGameIntegration(store: StoreState) {
@@ -48,6 +48,14 @@ export function setupGameIntegration(store: StoreState) {
         store.updateKeys(convertedKeys);
     };
 
+    window.updateSettings = (settings: string | UISettings) => {
+        const parsed = typeof settings === 'string'
+            ? JSON.parse(settings)
+            : settings;
+        console.log("updateSettings called with:", parsed);
+        store.updateSettings(parsed);
+    };
+
     window.updateSearchResults = (results: string | SearchResult[]) => {
         const parsed = typeof results === 'string'
             ? JSON.parse(results)
@@ -66,6 +74,14 @@ export function setupGameIntegration(store: StoreState) {
     window.updateExcitements = (data: string | any[]) => {
         const actorsState = typeof data === 'string' ? JSON.parse(data) : data;
         store.updateActorsState(actorsState);
+    };
+
+    window.updateActorPortrait = (formId: number, dataUrl: string) => {
+        store.updateActorPortrait(formId, dataUrl);
+    };
+
+    window.clearActorPortraits = () => {
+        store.clearActorPortraits();
     };
 
     window.onActorOrgasm = (actorIndex: number) => {
@@ -118,8 +134,16 @@ export function setupGameIntegration(store: StoreState) {
                 shouldListenToHold = lowerCaseControl === 'left' || lowerCaseControl === 'right';
             }
 
-            if(recentStore.activeMenu === 'searchMenu' || recentStore.activeMenu === 'navigation' || recentStore.activeMenu === 'utilityOptions') {
+            if(recentStore.activeMenu === 'searchMenu') {
                 shouldListenToHold = lowerCaseControl === 'up' || lowerCaseControl === 'down';
+            }
+
+            if(recentStore.activeMenu === 'navigation' || recentStore.activeMenu === 'utilityOptions') {
+                if (recentStore.settings.enableGridMenu) {
+                    shouldListenToHold = lowerCaseControl === 'up' || lowerCaseControl === 'down' || lowerCaseControl === 'left' || lowerCaseControl === 'right';
+                } else {
+                    shouldListenToHold = lowerCaseControl === 'up' || lowerCaseControl === 'down';
+                }
             }
         }
         if (shouldListenToHold) {
@@ -130,13 +154,21 @@ export function setupGameIntegration(store: StoreState) {
 
             stopRepeat();
             activeHoldControl = lowerCaseControl;
+            const initialFocusBlock = recentStore.focusBlock;
             store.handleControlInput(control);
+            if (useOStimStore.getState().focusBlock !== initialFocusBlock) {
+                return;
+            }
             repeatTimer = setTimeout(() => {
                 repeatInterval = setInterval(() => {
                     if (activeHoldControl !== lowerCaseControl) {
                         return;
                     }
+                    const prevFocusBlock = useOStimStore.getState().focusBlock;
                     store.handleControlInput(control);
+                    if (useOStimStore.getState().focusBlock !== prevFocusBlock) {
+                        stopRepeat();
+                    }
                 }, 50);
             }, 400);
         } else {

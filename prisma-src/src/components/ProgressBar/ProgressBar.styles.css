@@ -13,6 +13,39 @@
     background: radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.48) 25%, transparent 68%);
 }
 
+.circular-progress .progress-ring-box {
+    position: relative;
+    width: var(--pb-size, 8rem);
+    height: var(--pb-size, 8rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.circular-progress .progress-portrait {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 77.5%;
+    height: 77.5%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 38%, rgba(28, 28, 34, 0.65), rgba(8, 8, 12, 0.85));
+    pointer-events: none;
+    z-index: 0;
+}
+
+.circular-progress .progress-portrait-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    display: block;
+    pointer-events: none;
+    user-select: none;
+}
+
 .circular-progress .progress-bg {
     fill: none;
 }
@@ -72,8 +105,10 @@
  * margin-top clears the outer arcs which overflow their SVG box by ~3px. */
 .circular-progress .progress-label {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
     margin-top: 0.4rem;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -95,4 +130,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     text-align: center;
+}
+
+.circular-progress .progress-climax-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.circular-progress .progress-climax-icon {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    filter:
+        drop-shadow(0  1px 2px rgba(0, 0, 0, 0.9))
+        drop-shadow(0 -1px 2px rgba(0, 0, 0, 0.9))
+        drop-shadow( 1px 0 2px rgba(0, 0, 0, 0.9))
+        drop-shadow(-1px 0 2px rgba(0, 0, 0, 0.9));
 }

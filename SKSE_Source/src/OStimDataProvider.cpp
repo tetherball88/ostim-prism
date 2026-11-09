@@ -52,6 +52,18 @@ std::vector<OStimDataProvider::ActorData> OStimDataProvider::GetActorExcitements
     
     if (!ostimAPI) return result;
 
+    auto computeEquipSignature = [](RE::Actor* actor) -> uint64_t {
+        if (!actor) return 0;
+        uint64_t hash = 14695981039346656037ULL;
+        for (uint32_t bit = 0; bit < 32; ++bit) {
+            auto slot = static_cast<RE::BGSBipedObjectForm::BipedObjectSlot>(1u << bit);
+            auto* armor = actor->GetWornArmor(slot);
+            uint32_t fid = armor ? armor->GetFormID() : 0u;
+            hash ^= static_cast<uint64_t>(fid) + 0x9e3779b97f4a7c15ULL + (hash << 6) + (hash >> 2);
+        }
+        return hash;
+    };
+
     constexpr uint32_t MAX_ACTORS = 10;
     OstimNG_API::Thread::ActorData buffer[MAX_ACTORS];
 
@@ -64,6 +76,8 @@ std::vector<OStimDataProvider::ActorData> OStimDataProvider::GetActorExcitements
 
         ActorData data;
         
+        data.formId = buffer[i].formID;
+        data.equipSignature = computeEquipSignature(actorForm);
         data.name = actorForm->GetDisplayFullName();
         data.excitementProgress = buffer[i].excitement;
         data.timesClimaxed = buffer[i].timesClimaxed;

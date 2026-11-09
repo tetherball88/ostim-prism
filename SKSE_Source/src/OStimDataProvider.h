@@ -48,6 +48,8 @@ public:
 
     // Actor data structure for UI
     struct ActorData {
+        uint32_t formId = 0;
+        uint64_t equipSignature = 0;
         std::string name;
         float excitementProgress;
         float staminaProgress;

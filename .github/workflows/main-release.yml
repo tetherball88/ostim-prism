@@ -32,6 +32,12 @@ jobs:
             TT_OStimPrism.esp \
             -x ".github/*"
 
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-zip
+          path: out/OStimPrism_${{ github.ref_name }}.zip
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -40,3 +46,40 @@ jobs:
           body: "Automated release for ${{ github.ref_name }}"
           files: |
             out/OStimPrism_${{ github.ref_name }}.zip
+
+  publish-nexus:
+    name: Publish to Nexus Mods
+    needs: make-release
+    runs-on: ubuntu-latest
+    environment: nexusmods
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-zip
+          path: out
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          CLEAN_VERSION="${TAG#v}"
+          echo "clean_version=${CLEAN_VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "${TAG}" != "${CLEAN_VERSION}" ]; then
+            mv "out/OStimPrism_${TAG}.zip" "out/OStimPrism_${CLEAN_VERSION}.zip"
+          fi
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@v1
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          mod_id: ${{ vars.NEXUSMODS_MOD_ID || secrets.NEXUSMODS_MOD_ID }}
+          file_id: ${{ vars.NEXUSMODS_FILE_ID || secrets.NEXUSMODS_FILE_ID }}
+          filename: out/OStimPrism_${{ steps.version.outputs.clean_version }}.zip
+          version: ${{ steps.version.outputs.clean_version }}
+          display_name: OStim Prism ${{ steps.version.outputs.clean_version }}
+          description: Automated release for ${{ steps.version.outputs.clean_version }}
+          category: main
+          update_mod_version: true
+          primary_mod_manager_download: true
+          archive_existing_version: false

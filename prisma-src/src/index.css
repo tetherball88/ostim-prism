@@ -43,21 +43,28 @@ body {
     color: #ffffff;
 }
 
-/* Bottom anchor — horizontal rule at the panel base level so all left and
- * right components appear to sit on a shared ground line.
- * Positioned at --hud-bottom (same as the panels), not at screen bottom. */
-body::after {
-    content: '';
+/* Main HUD Block (ControlButtons + Active Menu + Ground Line) */
+.hud-main-block {
     position: fixed;
-    bottom: var(--hud-bottom);
-    left: calc(1vw + 2px);
-    width: calc(30em);
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    z-index: 10;
+}
+
+.hud-main-block::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 2px;
+    width: 100%;
+    min-width: 22em;
     height: 2px;
     background: linear-gradient(
         90deg,
         transparent 0%,
         rgba(200, 168, 75, 0.55) 0%,
-        rgba(200, 168, 75, 0.55) 75%,
+        rgba(200, 168, 75, 0.55) 80%,
         transparent 100%
     );
     box-shadow: 0 0 8px rgba(200, 168, 75, 0.30);
@@ -73,17 +80,18 @@ body::after {
 }
 
 .buttons-section {
-    position: absolute;
-    bottom: var(--hud-bottom);
-    left: 1vw;           /* viewport-relative so it scales consistently */
+    position: relative;
+    flex-shrink: 0;
 }
 
 .menu-section {
-    position: fixed;
-    left: var(--hud-left-edge);
-    bottom: var(--hud-bottom);
+    position: relative;
     width: 30em;
     transition: opacity 0.25s ease, filter 0.25s ease;
+}
+
+.menu-section.grid-mode {
+    width: fit-content;
 }
 
 .focus-buttons .menu-section {

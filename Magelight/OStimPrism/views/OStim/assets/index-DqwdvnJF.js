@@ -7295,9 +7295,52 @@
     },
     moveNavigationFocus: (direction) => set((state) => {
       const { options, activeIndex } = state.navigation;
+      if (options.length === 0) return {};
       const next = Math.max(0, Math.min(activeIndex + direction, options.length - 1));
-      return { navigation: { ...state.navigation, activeIndex: next } };
-    })
+      return {
+        navigatingAt: Date.now(),
+        navigation: { ...state.navigation, activeIndex: next }
+      };
+    }),
+    moveNavigationGridFocus: (direction) => {
+      const state = get();
+      const { options, activeIndex } = state.navigation;
+      const total = options.length;
+      if (total === 0) return false;
+      const cols = Math.max(1, state.settings.gridColumns || 4);
+      const col = activeIndex % cols;
+      const logicalRow = Math.floor(activeIndex / cols);
+      const totalRows = Math.ceil(total / cols);
+      if (direction === "left") {
+        if (col === 0) return false;
+        set((s) => ({
+          navigatingAt: Date.now(),
+          navigation: { ...s.navigation, activeIndex: activeIndex - 1 }
+        }));
+        return true;
+      }
+      let next = activeIndex;
+      if (direction === "right") {
+        if (activeIndex + 1 < total) {
+          next = activeIndex + 1;
+        }
+      } else if (direction === "up") {
+        if (logicalRow < totalRows - 1) {
+          next = Math.min(total - 1, activeIndex + cols);
+        }
+      } else if (direction === "down") {
+        if (logicalRow > 0) {
+          next = activeIndex - cols;
+        }
+      }
+      if (next !== activeIndex) {
+        set((s) => ({
+          navigatingAt: Date.now(),
+          navigation: { ...s.navigation, activeIndex: next }
+        }));
+      }
+      return true;
+    }
   });
   const createControlButtonsSlice = (set) => ({
     controlButtons: {
@@ -7476,9 +7519,9 @@
     })
   });
   const mockDataActors = [
-    { name: "Actor 11111111", excitementProgress: 32, gender: "male", staminaProgress: 50, additionalProgress: 25, timesClimaxed: 1 },
-    { name: "Actor 2", excitementProgress: 75, gender: "female", staminaProgress: 60, additionalProgress: -1, timesClimaxed: 0 },
-    { name: "Actor 3", excitementProgress: 30, gender: "neither", staminaProgress: 40, additionalProgress: -1, timesClimaxed: 0 }
+    { formId: 1, name: "Actor 11111111", excitementProgress: 32, gender: "male", staminaProgress: 50, additionalProgress: 25, timesClimaxed: 1 },
+    { formId: 2, name: "Actor 2", excitementProgress: 75, gender: "female", staminaProgress: 60, additionalProgress: -1, timesClimaxed: 2 },
+    { formId: 3, name: "Actor 3", excitementProgress: 30, gender: "neither", staminaProgress: 40, additionalProgress: -1, timesClimaxed: 0 }
   ];
   const createActorStatsSlice = (set) => ({
     actorsState: mockDataActors,
@@ -7488,13 +7531,68 @@
       const updated = [...state.orgasmPinnedUntil];
       updated[index] = Date.now() + 3e3;
       return { orgasmPinnedUntil: updated };
-    })
+    }),
+    actorPortraits: {},
+    updateActorPortrait: (formId, dataUrl) => set((state) => ({
+      actorPortraits: {
+        ...state.actorPortraits,
+        [formId]: dataUrl
+      }
+    })),
+    clearActorPortraits: () => set(() => ({ actorPortraits: {} }))
   });
+  function getInitialSettings() {
+    const defaults = {
+      enableGridMenu: true,
+      gridColumns: 4,
+      gridRows: 4,
+      mainBlockX: -1,
+      mainBlockY: -1,
+      mainBlockScale: 100,
+      excitementBlockX: -1,
+      excitementBlockY: -1,
+      excitementBlockScale: 100
+    };
+    return defaults;
+  }
   const createGlobalUISlice = (set, get) => ({
     activeMenu: "navigation",
     focusBlock: "menu",
     navigatingAt: 0,
     gameReady: false,
+    settings: getInitialSettings(),
+    updateSettings: (newSettings) => set((state) => {
+      const merged = {
+        ...state.settings,
+        ...newSettings,
+        gridColumns: Math.max(1, Math.min(12, Number(newSettings.gridColumns ?? state.settings.gridColumns) || 4)),
+        gridRows: Math.max(1, Math.min(12, Number(newSettings.gridRows ?? state.settings.gridRows) || 4)),
+        mainBlockScale: Math.max(30, Math.min(250, Number(newSettings.mainBlockScale ?? state.settings.mainBlockScale) || 100)),
+        excitementBlockScale: Math.max(30, Math.min(250, Number(newSettings.excitementBlockScale ?? state.settings.excitementBlockScale) || 100))
+      };
+      return { settings: merged };
+    }),
+    saveLayoutSettings: (newSettings, commit = true) => {
+      var _a;
+      get().updateSettings(newSettings);
+      if (commit) {
+        const { settings } = get();
+        const payload = {
+          mainBlockX: settings.mainBlockX,
+          mainBlockY: settings.mainBlockY,
+          mainBlockScale: settings.mainBlockScale,
+          excitementBlockX: settings.excitementBlockX,
+          excitementBlockY: settings.excitementBlockY,
+          excitementBlockScale: settings.excitementBlockScale,
+          gridColumns: settings.gridColumns,
+          gridRows: settings.gridRows
+        };
+        (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({
+          action: "saveLayout",
+          payload
+        }));
+      }
+    },
     updateActiveMenu: (menu) => set((state) => {
       var _a, _b;
       const prevMenu = state.activeMenu;
@@ -7586,15 +7684,45 @@
             state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex((b) => b.id === "searchMenu"));
           } else if (lowerCaseControl === "yes") state.selectSearchResult();
         } else if (activeMenu === "navigation") {
-          if (lowerCaseControl === "up") state.moveNavigationFocus(1);
-          else if (lowerCaseControl === "down") state.moveNavigationFocus(-1);
-          else if (lowerCaseControl === "left") state.setFocusBlock("buttons");
-          else if (lowerCaseControl === "yes") state.selectNavigationOption();
+          if (state.settings.enableGridMenu) {
+            if (lowerCaseControl === "up" || lowerCaseControl === "down" || lowerCaseControl === "right") {
+              state.moveNavigationGridFocus(lowerCaseControl);
+            } else if (lowerCaseControl === "left") {
+              const moved = state.moveNavigationGridFocus("left");
+              if (!moved) state.setFocusBlock("buttons");
+            } else if (lowerCaseControl === "wheelup") {
+              state.moveNavigationFocus(1);
+            } else if (lowerCaseControl === "wheeldown") {
+              state.moveNavigationFocus(-1);
+            } else if (lowerCaseControl === "yes") {
+              state.selectNavigationOption();
+            }
+          } else {
+            if (lowerCaseControl === "up" || lowerCaseControl === "wheelup") state.moveNavigationFocus(1);
+            else if (lowerCaseControl === "down" || lowerCaseControl === "wheeldown") state.moveNavigationFocus(-1);
+            else if (lowerCaseControl === "left") state.setFocusBlock("buttons");
+            else if (lowerCaseControl === "yes") state.selectNavigationOption();
+          }
         } else if (activeMenu === "utilityOptions") {
-          if (lowerCaseControl === "up") state.moveUtilityOptionsFocus(1);
-          else if (lowerCaseControl === "down") state.moveUtilityOptionsFocus(-1);
-          else if (lowerCaseControl === "left") state.setFocusBlock("buttons");
-          else if (lowerCaseControl === "yes") state.selectUtilityOption();
+          if (state.settings.enableGridMenu) {
+            if (lowerCaseControl === "up" || lowerCaseControl === "down" || lowerCaseControl === "right") {
+              state.moveUtilityOptionsGridFocus(lowerCaseControl);
+            } else if (lowerCaseControl === "left") {
+              const moved = state.moveUtilityOptionsGridFocus("left");
+              if (!moved) state.setFocusBlock("buttons");
+            } else if (lowerCaseControl === "wheelup") {
+              state.moveUtilityOptionsFocus(1);
+            } else if (lowerCaseControl === "wheeldown") {
+              state.moveUtilityOptionsFocus(-1);
+            } else if (lowerCaseControl === "yes") {
+              state.selectUtilityOption();
+            }
+          } else {
+            if (lowerCaseControl === "up" || lowerCaseControl === "wheelup") state.moveUtilityOptionsFocus(1);
+            else if (lowerCaseControl === "down" || lowerCaseControl === "wheeldown") state.moveUtilityOptionsFocus(-1);
+            else if (lowerCaseControl === "left") state.setFocusBlock("buttons");
+            else if (lowerCaseControl === "yes") state.selectUtilityOption();
+          }
         }
       }
     },
@@ -7629,9 +7757,52 @@
     },
     moveUtilityOptionsFocus: (direction) => set((state) => {
       const { options, activeIndex } = state.utilityOptions;
+      if (options.length === 0) return {};
       const next = Math.max(0, Math.min(activeIndex + direction, options.length - 1));
-      return { utilityOptions: { ...state.utilityOptions, activeIndex: next } };
-    })
+      return {
+        navigatingAt: Date.now(),
+        utilityOptions: { ...state.utilityOptions, activeIndex: next }
+      };
+    }),
+    moveUtilityOptionsGridFocus: (direction) => {
+      const state = get();
+      const { options, activeIndex } = state.utilityOptions;
+      const total = options.length;
+      if (total === 0) return false;
+      const cols = Math.max(1, state.settings.gridColumns || 4);
+      const col = activeIndex % cols;
+      const logicalRow = Math.floor(activeIndex / cols);
+      const totalRows = Math.ceil(total / cols);
+      if (direction === "left") {
+        if (col === 0) return false;
+        set((s) => ({
+          navigatingAt: Date.now(),
+          utilityOptions: { ...s.utilityOptions, activeIndex: activeIndex - 1 }
+        }));
+        return true;
+      }
+      let next = activeIndex;
+      if (direction === "right") {
+        if (activeIndex + 1 < total) {
+          next = activeIndex + 1;
+        }
+      } else if (direction === "up") {
+        if (logicalRow < totalRows - 1) {
+          next = Math.min(total - 1, activeIndex + cols);
+        }
+      } else if (direction === "down") {
+        if (logicalRow > 0) {
+          next = activeIndex - cols;
+        }
+      }
+      if (next !== activeIndex) {
+        set((s) => ({
+          navigatingAt: Date.now(),
+          utilityOptions: { ...s.utilityOptions, activeIndex: next }
+        }));
+      }
+      return true;
+    }
   });
   const initialThreadStatus = {
     autoControl: false,
@@ -7695,6 +7866,8 @@
   const ProgressBar = ({ index }) => {
     useOStimStore((state) => state.updateActorsState);
     useOStimStore((state) => state.actorsState);
+    const formId = useOStimStore((state) => state.actorsState[index].formId);
+    const portraitUrl = useOStimStore((state) => formId !== void 0 ? state.actorPortraits[formId] : void 0);
     const name = useOStimStore((state) => state.actorsState[index].name);
     const gender = useOStimStore((state) => state.actorsState[index].gender);
     const rawExcitementProgress = useOStimStore((state) => state.actorsState[index].excitementProgress);
@@ -7829,127 +8002,157 @@
         className: `circular-progress${isHighProgress ? " high-progress" : ""}`,
         style: { "--pulse-duration": `${pulseDuration}s`, "--glow-color": color },
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "svg",
-            {
-              viewBox: `0 0 ${size} ${size}`,
-              style: { width: "var(--pb-size, 8rem)", height: "var(--pb-size, 8rem)", overflow: "visible" },
-              onMouseMove: handleMouseMove,
-              onMouseLeave: hideTooltip,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "path",
-                  {
-                    className: "outer-ring-left-bg",
-                    d: describeArc(outerRadius, rotation, rotation + 135),
-                    strokeWidth: outerStrokeWidth,
-                    stroke: "#95ed6480",
-                    fill: "none"
-                  }
-                ),
-                animProgress.stamina > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "path",
-                  {
-                    className: "outer-ring-left",
-                    d: describeArc(outerRadius, rotation, outerLeftFillEnd),
-                    strokeWidth: outerStrokeWidth,
-                    stroke: "#95ed64",
-                    fill: "none",
-                    style: { pointerEvents: "none" }
-                  }
-                ),
-                additionalProgress === -1 ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "progress-ring-box", children: [
+            portraitUrl && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "progress-portrait", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "img",
+              {
+                className: "progress-portrait-img",
+                src: portraitUrl,
+                alt: name,
+                draggable: false
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "svg",
+              {
+                viewBox: `0 0 ${size} ${size}`,
+                style: { width: "var(--pb-size, 8rem)", height: "var(--pb-size, 8rem)", overflow: "visible", position: "relative", zIndex: 1 },
+                onMouseMove: handleMouseMove,
+                onMouseLeave: hideTooltip,
+                children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "path",
                     {
-                      className: "outer-ring-right-bg",
-                      d: describeArc(outerRadius, rotation + 135, rotation + 270),
+                      className: "outer-ring-left-bg",
+                      d: describeArc(outerRadius, rotation, rotation + 135),
                       strokeWidth: outerStrokeWidth,
-                      stroke: "#C5C5C5",
+                      stroke: "#95ed6480",
                       fill: "none"
                     }
                   ),
-                  animProgress.additional > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  animProgress.stamina > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
                     "path",
                     {
-                      className: "outer-ring-right",
-                      d: describeArc(outerRadius, rotation + 270, outerRightFillEnd, false),
+                      className: "outer-ring-left",
+                      d: describeArc(outerRadius, rotation, outerLeftFillEnd),
                       strokeWidth: outerStrokeWidth,
-                      stroke: "#FFFFF0",
+                      stroke: "#95ed64",
                       fill: "none",
                       style: { pointerEvents: "none" }
                     }
-                  )
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "path",
-                  {
-                    className: "progress-bg",
-                    d: describeArc(radius, rotation, rotation + 270),
-                    stroke: `${color}80`,
-                    strokeWidth,
-                    fill: "none"
-                  }
-                ),
-                animProgress.excitement > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "path",
-                  {
-                    className: "progress-fill",
-                    d: describeArc(radius, rotation, innerFillEnd),
-                    strokeWidth,
-                    stroke: color,
-                    fill: "none",
-                    style: { color, pointerEvents: "none" }
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+                  ),
+                  additionalProgress === -1 ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "path",
+                      {
+                        className: "outer-ring-right-bg",
+                        d: describeArc(outerRadius, rotation + 135, rotation + 270),
+                        strokeWidth: outerStrokeWidth,
+                        stroke: "#C5C5C5",
+                        fill: "none"
+                      }
+                    ),
+                    animProgress.additional > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "path",
+                      {
+                        className: "outer-ring-right",
+                        d: describeArc(outerRadius, rotation + 270, outerRightFillEnd, false),
+                        strokeWidth: outerStrokeWidth,
+                        stroke: "#FFFFF0",
+                        fill: "none",
+                        style: { pointerEvents: "none" }
+                      }
+                    )
+                  ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "rect",
+                    "path",
                     {
-                      x: size / 4,
-                      y: size / 4,
-                      width: size / 2,
-                      height: size / 2,
-                      fill: "transparent"
+                      className: "progress-bg",
+                      d: describeArc(radius, rotation, rotation + 270),
+                      stroke: `${color}80`,
+                      strokeWidth,
+                      fill: "none"
                     }
                   ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                    "svg",
+                  animProgress.excitement > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "path",
                     {
-                      x: size / 2 - size / 4 + 2,
-                      y: size / 2 - size / 8 - 4,
-                      viewBox: "0 0 2048 2048",
-                      width: size / 4,
-                      height: size / 4,
-                      preserveAspectRatio: "none",
-                      fill: color,
-                      style: { pointerEvents: "none" },
-                      children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 275.969 505.424 C 306.487 505.906 325.269 520.872 337.506 548.313 C 344.807 564.685 353.604 582.304 362.034 598.148 C 378.607 628.871 396.586 658.814 415.915 687.882 C 486.926 793.2 568.779 890.786 660.133 979.04 C 694.409 1012.4 729.589 1044.82 765.634 1076.26 C 827.541 1130.18 869.496 1156.28 911.337 1229.56 C 961.217 1317.45 974.281 1421.51 947.673 1519.01 C 918.658 1624.23 858.178 1691.61 764.715 1744.56 C 714.741 1769.88 665.907 1786.24 609.78 1791.86 C 515.706 1801.33 420.998 1781.58 338.556 1735.28 C 201.519 1659.7 143.692 1525.52 129.615 1374.84 C 126.26 1338.93 134.998 1289.97 138.939 1252.94 L 166.277 1008.79 L 200.416 705.314 L 211.103 610.48 C 216.385 563.243 214.17 510.623 275.969 505.424 z" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 1472.77 239.457 C 1498.12 238.883 1523.48 239.931 1548.69 242.597 C 1659.46 254.751 1771.28 301.31 1841.91 390.184 C 1904.08 468.421 1928.61 568.21 1917.57 666.782 C 1904.8 771.775 1851.19 867.511 1768.33 933.249 C 1629.77 1043.27 1448.5 1038.99 1315.89 922.247 C 1299.22 907.566 1284.84 888.747 1271.15 871.334 C 1254.69 848.951 1234.65 823.973 1213.55 805.7 C 1081.56 691.409 933.871 583.872 765.956 530.171 C 743.707 523.056 718.102 520.88 700.45 504.86 C 688.292 493.754 681.055 478.266 680.335 461.814 C 679.572 444.644 685.194 427.696 696.791 414.852 C 713.15 396.732 737.722 394.078 760.491 389.066 L 818.201 376.237 L 1007.55 334.059 L 1262.5 277.171 L 1349.71 257.68 C 1395.46 247.473 1425.82 241.701 1472.77 239.457 z" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 1191.7 1053.39 C 1212.36 1052.95 1227.01 1061.29 1244.65 1070.74 C 1264.13 1081.16 1283.68 1091.54 1303.18 1101.93 L 1450.47 1180.34 L 1557.31 1237.26 C 1581.91 1250.36 1610.4 1264.65 1633.09 1280.27 C 1662.75 1300.56 1688.65 1325.88 1709.6 1355.07 C 1755.32 1418.81 1773.71 1498.16 1760.69 1575.51 C 1748.12 1650.18 1707.02 1712.45 1645.56 1755.9 C 1607.78 1782.08 1548.9 1806.72 1503.21 1811.23 C 1437.3 1817.73 1374.7 1795.85 1323.94 1753.79 C 1283.64 1720.07 1252.9 1676.37 1234.79 1627.06 C 1218.86 1584.01 1218.01 1556.93 1214.03 1512.94 C 1209.53 1463.23 1206.57 1409.73 1197.23 1360.8 C 1194.13 1344.6 1183.66 1314.24 1178.43 1297.68 L 1144.8 1191.45 C 1139.23 1173.85 1128.47 1143.5 1126.96 1126.56 C 1125.42 1108.55 1131.17 1090.68 1142.92 1076.96 C 1155.96 1061.6 1172.05 1055.14 1191.7 1053.39 z" })
-                      ]
+                      className: "progress-fill",
+                      d: describeArc(radius, rotation, innerFillEnd),
+                      strokeWidth,
+                      stroke: color,
+                      fill: "none",
+                      style: { color, pointerEvents: "none" }
                     }
                   ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "text",
-                    {
-                      className: "progress-percentage",
-                      x: size / 2 + 6,
-                      y: size / 2,
-                      textAnchor: "start",
-                      dominantBaseline: "middle",
-                      fill: color,
-                      fontSize: size / 3,
-                      style: { pointerEvents: "none" },
-                      children: timesClimaxed
-                    }
-                  )
-                ] })
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "progress-label", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "progress-name", children: name }) }),
+                  !portraitUrl && /* Climax icon — fallback when Phantasm is not installed or portrait unavailable */
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "rect",
+                      {
+                        x: size / 4,
+                        y: size / 4,
+                        width: size / 2,
+                        height: size / 2,
+                        fill: "transparent"
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "svg",
+                      {
+                        x: size / 2 - size / 4 + 2,
+                        y: size / 2 - size / 8 - 4,
+                        viewBox: "0 0 2048 2048",
+                        width: size / 4,
+                        height: size / 4,
+                        preserveAspectRatio: "none",
+                        fill: color,
+                        style: { pointerEvents: "none" },
+                        children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 275.969 505.424 C 306.487 505.906 325.269 520.872 337.506 548.313 C 344.807 564.685 353.604 582.304 362.034 598.148 C 378.607 628.871 396.586 658.814 415.915 687.882 C 486.926 793.2 568.779 890.786 660.133 979.04 C 694.409 1012.4 729.589 1044.82 765.634 1076.26 C 827.541 1130.18 869.496 1156.28 911.337 1229.56 C 961.217 1317.45 974.281 1421.51 947.673 1519.01 C 918.658 1624.23 858.178 1691.61 764.715 1744.56 C 714.741 1769.88 665.907 1786.24 609.78 1791.86 C 515.706 1801.33 420.998 1781.58 338.556 1735.28 C 201.519 1659.7 143.692 1525.52 129.615 1374.84 C 126.26 1338.93 134.998 1289.97 138.939 1252.94 L 166.277 1008.79 L 200.416 705.314 L 211.103 610.48 C 216.385 563.243 214.17 510.623 275.969 505.424 z" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 1472.77 239.457 C 1498.12 238.883 1523.48 239.931 1548.69 242.597 C 1659.46 254.751 1771.28 301.31 1841.91 390.184 C 1904.08 468.421 1928.61 568.21 1917.57 666.782 C 1904.8 771.775 1851.19 867.511 1768.33 933.249 C 1629.77 1043.27 1448.5 1038.99 1315.89 922.247 C 1299.22 907.566 1284.84 888.747 1271.15 871.334 C 1254.69 848.951 1234.65 823.973 1213.55 805.7 C 1081.56 691.409 933.871 583.872 765.956 530.171 C 743.707 523.056 718.102 520.88 700.45 504.86 C 688.292 493.754 681.055 478.266 680.335 461.814 C 679.572 444.644 685.194 427.696 696.791 414.852 C 713.15 396.732 737.722 394.078 760.491 389.066 L 818.201 376.237 L 1007.55 334.059 L 1262.5 277.171 L 1349.71 257.68 C 1395.46 247.473 1425.82 241.701 1472.77 239.457 z" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 1191.7 1053.39 C 1212.36 1052.95 1227.01 1061.29 1244.65 1070.74 C 1264.13 1081.16 1283.68 1091.54 1303.18 1101.93 L 1450.47 1180.34 L 1557.31 1237.26 C 1581.91 1250.36 1610.4 1264.65 1633.09 1280.27 C 1662.75 1300.56 1688.65 1325.88 1709.6 1355.07 C 1755.32 1418.81 1773.71 1498.16 1760.69 1575.51 C 1748.12 1650.18 1707.02 1712.45 1645.56 1755.9 C 1607.78 1782.08 1548.9 1806.72 1503.21 1811.23 C 1437.3 1817.73 1374.7 1795.85 1323.94 1753.79 C 1283.64 1720.07 1252.9 1676.37 1234.79 1627.06 C 1218.86 1584.01 1218.01 1556.93 1214.03 1512.94 C 1209.53 1463.23 1206.57 1409.73 1197.23 1360.8 C 1194.13 1344.6 1183.66 1314.24 1178.43 1297.68 L 1144.8 1191.45 C 1139.23 1173.85 1128.47 1143.5 1126.96 1126.56 C 1125.42 1108.55 1131.17 1090.68 1142.92 1076.96 C 1155.96 1061.6 1172.05 1055.14 1191.7 1053.39 z" })
+                        ]
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "text",
+                      {
+                        className: "progress-percentage",
+                        x: size / 2 + 6,
+                        y: size / 2,
+                        textAnchor: "start",
+                        dominantBaseline: "middle",
+                        fill: color,
+                        fontSize: size / 3,
+                        style: { pointerEvents: "none" },
+                        children: timesClimaxed
+                      }
+                    )
+                  ] })
+                ]
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "progress-label", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "progress-name", children: name }),
+            portraitUrl && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "progress-climax-badge", style: { color }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "svg",
+                {
+                  className: "progress-climax-icon",
+                  viewBox: "0 0 2048 2048",
+                  fill: color,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 275.969 505.424 C 306.487 505.906 325.269 520.872 337.506 548.313 C 344.807 564.685 353.604 582.304 362.034 598.148 C 378.607 628.871 396.586 658.814 415.915 687.882 C 486.926 793.2 568.779 890.786 660.133 979.04 C 694.409 1012.4 729.589 1044.82 765.634 1076.26 C 827.541 1130.18 869.496 1156.28 911.337 1229.56 C 961.217 1317.45 974.281 1421.51 947.673 1519.01 C 918.658 1624.23 858.178 1691.61 764.715 1744.56 C 714.741 1769.88 665.907 1786.24 609.78 1791.86 C 515.706 1801.33 420.998 1781.58 338.556 1735.28 C 201.519 1659.7 143.692 1525.52 129.615 1374.84 C 126.26 1338.93 134.998 1289.97 138.939 1252.94 L 166.277 1008.79 L 200.416 705.314 L 211.103 610.48 C 216.385 563.243 214.17 510.623 275.969 505.424 z" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 1472.77 239.457 C 1498.12 238.883 1523.48 239.931 1548.69 242.597 C 1659.46 254.751 1771.28 301.31 1841.91 390.184 C 1904.08 468.421 1928.61 568.21 1917.57 666.782 C 1904.8 771.775 1851.19 867.511 1768.33 933.249 C 1629.77 1043.27 1448.5 1038.99 1315.89 922.247 C 1299.22 907.566 1284.84 888.747 1271.15 871.334 C 1254.69 848.951 1234.65 823.973 1213.55 805.7 C 1081.56 691.409 933.871 583.872 765.956 530.171 C 743.707 523.056 718.102 520.88 700.45 504.86 C 688.292 493.754 681.055 478.266 680.335 461.814 C 679.572 444.644 685.194 427.696 696.791 414.852 C 713.15 396.732 737.722 394.078 760.491 389.066 L 818.201 376.237 L 1007.55 334.059 L 1262.5 277.171 L 1349.71 257.68 C 1395.46 247.473 1425.82 241.701 1472.77 239.457 z" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 1191.7 1053.39 C 1212.36 1052.95 1227.01 1061.29 1244.65 1070.74 C 1264.13 1081.16 1283.68 1091.54 1303.18 1101.93 L 1450.47 1180.34 L 1557.31 1237.26 C 1581.91 1250.36 1610.4 1264.65 1633.09 1280.27 C 1662.75 1300.56 1688.65 1325.88 1709.6 1355.07 C 1755.32 1418.81 1773.71 1498.16 1760.69 1575.51 C 1748.12 1650.18 1707.02 1712.45 1645.56 1755.9 C 1607.78 1782.08 1548.9 1806.72 1503.21 1811.23 C 1437.3 1817.73 1374.7 1795.85 1323.94 1753.79 C 1283.64 1720.07 1252.9 1676.37 1234.79 1627.06 C 1218.86 1584.01 1218.01 1556.93 1214.03 1512.94 C 1209.53 1463.23 1206.57 1409.73 1197.23 1360.8 C 1194.13 1344.6 1183.66 1314.24 1178.43 1297.68 L 1144.8 1191.45 C 1139.23 1173.85 1128.47 1143.5 1126.96 1126.56 C 1125.42 1108.55 1131.17 1090.68 1142.92 1076.96 C 1155.96 1061.6 1172.05 1055.14 1191.7 1053.39 z" })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: timesClimaxed })
+            ] })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { ...tooltip })
         ]
       }
@@ -8073,18 +8276,313 @@
       /* @__PURE__ */ jsxRuntimeExports.jsx(Tooltip, { ...tooltip })
     ] });
   }
+  const MIN_SCALE = 30;
+  const MAX_SCALE = 250;
+  const SCALE_STEP = 5;
+  const MIN_GRID = 1;
+  const MAX_GRID = 12;
+  const BlockLayoutControls = ({
+    blockRef,
+    scale,
+    placement = "top-left",
+    gridColumns,
+    gridRows,
+    onChange
+  }) => {
+    const [isDragging, setIsDragging] = reactExports.useState(false);
+    const [isEditing, setIsEditing] = reactExports.useState(false);
+    const [inputValue, setInputValue] = reactExports.useState(`${scale}%`);
+    const [isEditingCols, setIsEditingCols] = reactExports.useState(false);
+    const [colsInput, setColsInput] = reactExports.useState(String(gridColumns ?? 4));
+    const [isEditingRows, setIsEditingRows] = reactExports.useState(false);
+    const [rowsInput, setRowsInput] = reactExports.useState(String(gridRows ?? 4));
+    const cancelGridBlurRef = reactExports.useRef(false);
+    reactExports.useEffect(() => {
+      if (!isEditing) {
+        setInputValue(`${scale}%`);
+      }
+    }, [scale, isEditing]);
+    reactExports.useEffect(() => {
+      if (!isEditingCols && gridColumns !== void 0) {
+        setColsInput(String(gridColumns));
+      }
+    }, [gridColumns, isEditingCols]);
+    reactExports.useEffect(() => {
+      if (!isEditingRows && gridRows !== void 0) {
+        setRowsInput(String(gridRows));
+      }
+    }, [gridRows, isEditingRows]);
+    const handleDragMouseDown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const el2 = blockRef.current;
+      if (!el2) return;
+      const rect = el2.getBoundingClientRect();
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
+      const startX = Math.round(rect.left);
+      const startY = Math.round(window.innerHeight - rect.bottom);
+      setIsDragging(true);
+      const handleMouseMove = (moveEvent) => {
+        const dx = moveEvent.clientX - startClientX;
+        const dy = moveEvent.clientY - startClientY;
+        const nextX = Math.max(0, Math.min(window.innerWidth - 40, Math.round(startX + dx)));
+        const nextY = Math.max(0, Math.min(window.innerHeight - 40, Math.round(startY - dy)));
+        onChange({ x: nextX, y: nextY }, false);
+      };
+      const handleMouseUp = (upEvent) => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+        setIsDragging(false);
+        const dx = upEvent.clientX - startClientX;
+        const dy = upEvent.clientY - startClientY;
+        const nextX = Math.max(0, Math.min(window.innerWidth - 40, Math.round(startX + dx)));
+        const nextY = Math.max(0, Math.min(window.innerHeight - 40, Math.round(startY - dy)));
+        onChange({ x: nextX, y: nextY }, true);
+      };
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    };
+    const commitScaleInput = () => {
+      setIsEditing(false);
+      const cleaned = inputValue.replace(/[^0-9]/g, "");
+      const parsed = parseInt(cleaned, 10);
+      if (Number.isNaN(parsed)) {
+        setInputValue(`${scale}%`);
+        return;
+      }
+      const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, parsed));
+      setInputValue(`${clamped}%`);
+      if (clamped !== scale) {
+        onChange({ scale: clamped }, true);
+      }
+    };
+    const stepScale = (delta) => {
+      const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale + delta));
+      if (next !== scale) {
+        onChange({ scale: next }, true);
+      }
+    };
+    const commitGridInput = (raw, currentVal, setVal, setEditing, field) => {
+      setEditing(false);
+      const cleaned = raw.replace(/[^0-9]/g, "");
+      const parsed = parseInt(cleaned, 10);
+      if (Number.isNaN(parsed)) {
+        setVal(String(currentVal));
+        return;
+      }
+      const clamped = Math.max(MIN_GRID, Math.min(MAX_GRID, parsed));
+      setVal(String(clamped));
+      if (clamped !== currentVal) {
+        onChange({ [field]: clamped }, true);
+      }
+    };
+    const stepGridInput = (raw, delta, currentVal, setVal, field) => {
+      const parsed = parseInt(raw.replace(/[^0-9]/g, ""), 10);
+      const base = Number.isNaN(parsed) ? currentVal : parsed;
+      const next = Math.max(MIN_GRID, Math.min(MAX_GRID, base + delta));
+      setVal(String(next));
+      if (next !== currentVal) {
+        onChange({ [field]: next }, true);
+      }
+    };
+    const gridFields = gridColumns !== void 0 && gridRows !== void 0 ? [
+      {
+        field: "gridColumns",
+        label: "Cols",
+        title: "Grid columns (1-12)",
+        value: gridColumns,
+        inputValue: colsInput,
+        setInputValue: setColsInput,
+        setIsEditing: setIsEditingCols
+      },
+      {
+        field: "gridRows",
+        label: "Rows",
+        title: "Grid rows (1-12)",
+        value: gridRows,
+        inputValue: rowsInput,
+        setInputValue: setRowsInput,
+        setIsEditing: setIsEditingRows
+      }
+    ] : null;
+    const counterScale = 100 / Math.max(MIN_SCALE, scale);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `block-layout-controls ${placement} ${isDragging || isEditing || isEditingCols || isEditingRows ? "active" : ""}`,
+        style: {
+          transform: `scale(${counterScale})`,
+          transformOrigin: placement === "bottom-left" ? "top left" : "bottom left"
+        },
+        onClick: (e) => e.stopPropagation(),
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: `block-drag-handle ${isDragging ? "dragging" : ""}`,
+              onMouseDown: handleDragMouseDown,
+              title: "Drag to move block",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "5 9 2 12 5 15" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "9 5 12 2 15 5" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "15 19 12 22 9 19" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("polyline", { points: "19 9 22 12 19 15" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "2", y1: "12", x2: "22", y2: "12" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "12", y1: "2", x2: "12", y2: "22" })
+              ] })
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-scale-controls", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "block-scale-btn",
+                onClick: () => stepScale(-SCALE_STEP),
+                title: "Decrease scale",
+                children: "−"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "text",
+                className: "block-scale-input",
+                value: inputValue,
+                onFocus: (e) => {
+                  setIsEditing(true);
+                  setInputValue(String(scale));
+                  e.currentTarget.select();
+                },
+                onChange: (e) => setInputValue(e.target.value),
+                onBlur: commitScaleInput,
+                onKeyDown: (e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  } else if (e.key === "Escape") {
+                    setIsEditing(false);
+                    setInputValue(`${scale}%`);
+                    e.currentTarget.blur();
+                  }
+                }
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "block-scale-btn",
+                onClick: () => stepScale(SCALE_STEP),
+                title: "Increase scale",
+                children: "+"
+              }
+            )
+          ] }),
+          gridFields && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "block-grid-controls", children: gridFields.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: "0.3rem" }, children: [
+            idx > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block-grid-sep", children: "×" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block-grid-field", title: item.title, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block-grid-label", children: item.label }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  className: "block-scale-input block-grid-input",
+                  value: item.inputValue,
+                  onFocus: (e) => {
+                    cancelGridBlurRef.current = false;
+                    item.setIsEditing(true);
+                    item.setInputValue(String(item.value));
+                    e.currentTarget.select();
+                  },
+                  onChange: (e) => item.setInputValue(e.target.value),
+                  onBlur: () => {
+                    if (cancelGridBlurRef.current) {
+                      cancelGridBlurRef.current = false;
+                      return;
+                    }
+                    commitGridInput(
+                      item.inputValue,
+                      item.value,
+                      item.setInputValue,
+                      item.setIsEditing,
+                      item.field
+                    );
+                  },
+                  onKeyDown: (e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur();
+                    } else if (e.key === "Escape") {
+                      cancelGridBlurRef.current = true;
+                      item.setIsEditing(false);
+                      item.setInputValue(String(item.value));
+                      e.currentTarget.blur();
+                    } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                      e.preventDefault();
+                      stepGridInput(
+                        item.inputValue,
+                        e.key === "ArrowUp" ? 1 : -1,
+                        item.value,
+                        item.setInputValue,
+                        item.field
+                      );
+                    }
+                  }
+                }
+              )
+            ] })
+          ] }, item.field)) })
+        ]
+      }
+    );
+  };
   const ProgressBarContainer = () => {
     const actorsState = useOStimStore((state) => state.actorsState);
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "progress-bar-container", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginRight: "80px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ThreadStatus, {}) }),
-      actorsState.map((actor, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ProgressBar,
-        {
-          index
+    const settings = useOStimStore((state) => state.settings);
+    const saveLayoutSettings = useOStimStore((state) => state.saveLayoutSettings);
+    const excitementBlockRef = reactExports.useRef(null);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: excitementBlockRef,
+        className: "hud-block progress-bar-container",
+        style: {
+          left: settings.excitementBlockX >= 0 ? `${settings.excitementBlockX}px` : "1vw",
+          bottom: settings.excitementBlockY >= 0 ? `${settings.excitementBlockY}px` : "20px",
+          transform: `scale(${settings.excitementBlockScale / 100})`,
+          transformOrigin: "bottom left"
         },
-        actor.name
-      ))
-    ] });
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginRight: "80px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(ThreadStatus, {}) }),
+          actorsState.map((actor, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ProgressBar,
+            {
+              index
+            },
+            actor.formId ?? actor.name
+          )),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            BlockLayoutControls,
+            {
+              blockRef: excitementBlockRef,
+              scale: settings.excitementBlockScale,
+              placement: "top-left",
+              onChange: ({ x: x2, y: y2, scale }, commit) => saveLayoutSettings(
+                {
+                  ...x2 !== void 0 ? { excitementBlockX: x2 } : {},
+                  ...y2 !== void 0 ? { excitementBlockY: y2 } : {},
+                  ...scale !== void 0 ? { excitementBlockScale: scale } : {}
+                },
+                commit
+              )
+            }
+          )
+        ]
+      }
+    );
   };
   const PLACEHOLDER_ICON = "./assets/icons/placeholder.png";
   const ddsPngCache = /* @__PURE__ */ new Map();
@@ -8395,19 +8893,31 @@
   }
   const HOVER_SUPPRESS_MS = 150;
   const ITEM_HEIGHT_EM = 4;
+  const GRID_CELL_EM = 4.25;
+  const GRID_GAP_EM = 0;
+  const GRID_PAD_EM = 0.15;
+  const MAX_VISIBLE_GRID_ROWS = 4;
   const List = ({ options, activeIndex, setListActiveIndex, selectOption }) => {
+    const enableGridMenu = useOStimStore((state) => state.settings.enableGridMenu);
+    const gridColumns = useOStimStore((state) => state.settings.gridColumns);
+    const gridRows = useOStimStore((state) => state.settings.gridRows);
     const [visibleCount, setVisibleCount] = reactExports.useState(5);
+    const [fontSizePx, setFontSizePx] = reactExports.useState(16);
     const [hoverIndex, setHoverIndex] = reactExports.useState(null);
     const windowRef = reactExports.useRef(null);
+    const getFontSize = () => {
+      if (!windowRef.current) return fontSizePx;
+      return parseFloat(getComputedStyle(windowRef.current).fontSize) || 16;
+    };
     const getItemHeight = () => {
-      if (!windowRef.current) return 64;
-      const fontSize = parseFloat(getComputedStyle(windowRef.current).fontSize);
-      return ITEM_HEIGHT_EM * fontSize;
+      return ITEM_HEIGHT_EM * getFontSize();
     };
     const updateVisibleCount = reactExports.useCallback(() => {
       if (!windowRef.current) return;
+      const fs = parseFloat(getComputedStyle(windowRef.current).fontSize) || 16;
+      setFontSizePx(fs);
       const containerHeight = windowRef.current.clientHeight;
-      const itemHeight = getItemHeight();
+      const itemHeight = ITEM_HEIGHT_EM * fs;
       const count = Math.floor(containerHeight / itemHeight);
       setVisibleCount(Math.max(1, count));
     }, []);
@@ -8418,7 +8928,7 @@
         observer.observe(windowRef.current);
       }
       return () => observer.disconnect();
-    }, [updateVisibleCount]);
+    }, [updateVisibleCount, enableGridMenu, gridColumns, gridRows, options.length]);
     reactExports.useEffect(() => {
       setHoverIndex(null);
     }, [activeIndex]);
@@ -8440,7 +8950,101 @@
       };
     };
     const { containerTransform, selectorPosition } = getScrollPositions();
-    const renderedIndex = hoverIndex ?? activeIndex;
+    const renderedIndex = Math.max(0, Math.min(options.length - 1, hoverIndex ?? activeIndex));
+    if (enableGridMenu) {
+      const cols = Math.max(1, gridColumns || 4);
+      const maxVisibleRows = Math.max(1, gridRows || MAX_VISIBLE_GRID_ROWS);
+      const totalRows = Math.max(1, Math.ceil(options.length / cols));
+      const visibleRows = Math.min(totalRows, maxVisibleRows);
+      const rowStrideEm = GRID_CELL_EM + GRID_GAP_EM;
+      const hasOverflow = totalRows > maxVisibleRows;
+      const peekEm = hasOverflow ? GRID_CELL_EM * 0.55 : 0;
+      const activeLogicalRow = Math.floor(activeIndex / cols);
+      const activeVisualRow = totalRows - 1 - activeLogicalRow;
+      const centerRow = Math.floor((visibleRows - 1) / 2);
+      const maxRowOffset = Math.max(0, totalRows - visibleRows);
+      const idealRowOffset = activeVisualRow - centerRow;
+      const rowOffset = Math.max(0, Math.min(idealRowOffset, maxRowOffset));
+      const isTopVisible = rowOffset === 0;
+      const isBottomVisible = rowOffset >= maxRowOffset;
+      const topShiftEm = !hasOverflow ? 0 : isBottomVisible ? peekEm : isTopVisible ? 0 : peekEm * 0.5;
+      const gridTransformYEm = -rowOffset * rowStrideEm + topShiftEm;
+      const selLogicalRow = Math.floor(renderedIndex / cols);
+      const selVisualRow = totalRows - 1 - selLogicalRow;
+      const selCol = renderedIndex % cols;
+      const selectorXEm = GRID_PAD_EM + selCol * rowStrideEm;
+      const selectorYEm = GRID_PAD_EM + (selVisualRow - rowOffset) * rowStrideEm + topShiftEm;
+      const baseWindowHeightEm = visibleRows * GRID_CELL_EM + Math.max(0, visibleRows - 1) * GRID_GAP_EM + 2 * GRID_PAD_EM;
+      const windowHeightEm = baseWindowHeightEm + peekEm;
+      const activeOption = options[renderedIndex];
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid-menu", children: options.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: `grid-window ${isTopVisible ? "top" : ""} ${isBottomVisible ? "bottom" : ""}`,
+            style: { height: `${windowHeightEm}em` },
+            ref: windowRef,
+            onMouseLeave: () => setHoverIndex(null),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "div",
+                {
+                  className: "grid-selector",
+                  style: { transform: `translate(${selectorXEm}em, ${selectorYEm}em)` }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "div",
+                {
+                  className: "grid-container",
+                  role: "listbox",
+                  style: {
+                    gridTemplateColumns: `repeat(${cols}, ${GRID_CELL_EM}em)`,
+                    gridTemplateRows: `repeat(${totalRows}, ${GRID_CELL_EM}em)`,
+                    gap: `${GRID_GAP_EM}em`,
+                    padding: `${GRID_PAD_EM}em`,
+                    transform: `translateY(${gridTransformYEm}em)`
+                  },
+                  children: options.map((opt, idx) => {
+                    const logicalRow = Math.floor(idx / cols);
+                    const visualRow = totalRows - 1 - logicalRow;
+                    const col = idx % cols;
+                    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      "div",
+                      {
+                        className: `grid-item ${idx === renderedIndex ? "active" : ""}`,
+                        style: {
+                          gridRowStart: visualRow + 1,
+                          gridColumnStart: col + 1
+                        },
+                        onMouseEnter: () => {
+                          if (Date.now() - useOStimStore.getState().navigatingAt < HOVER_SUPPRESS_MS) return;
+                          setHoverIndex(idx);
+                        },
+                        onClick: () => {
+                          setListActiveIndex(idx);
+                          selectOption(idx);
+                        },
+                        children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { base64Data: opt.iconData, path: opt.iconPath, size: "var(--control-buttons-size)" })
+                      },
+                      opt.id + opt.description + opt.iconPath + idx
+                    );
+                  })
+                }
+              )
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid-pedestal", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "grid-pedestal-label", children: (activeOption == null ? void 0 : activeOption.description) || "" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "grid-pedestal-count", children: [
+            String(renderedIndex + 1).padStart(2, "0"),
+            " / ",
+            String(options.length).padStart(2, "0")
+          ] })
+        ] })
+      ] }) });
+    }
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       options.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "list-count", children: [
         activeIndex + 1,
@@ -8903,6 +9507,9 @@
       };
       const handleKeyDown = (e) => {
         var _a, _b, _c, _d, _e, _f;
+        if (document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("block-scale-input")) {
+          return;
+        }
         const keyCode = getNormalizedKeyCode(e);
         const { keys } = useOStimStore.getState();
         if (!e.repeat) {
@@ -8942,7 +9549,12 @@
       };
       const handleWheel = (e) => {
         e.preventDefault();
-        window.handleControl(e.deltaY > 0 ? "up" : "down");
+        const { focusBlock, activeMenu, settings } = useOStimStore.getState();
+        if (focusBlock === "menu" && (activeMenu === "navigation" || activeMenu === "utilityOptions") && settings.enableGridMenu) {
+          window.handleControl(e.deltaY > 0 ? "wheelup" : "wheeldown");
+        } else {
+          window.handleControl(e.deltaY > 0 ? "up" : "down");
+        }
       };
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
@@ -9027,20 +9639,64 @@
     const updateActiveMenu = useOStimStore((state) => state.updateActiveMenu);
     const activeMenu = useOStimStore((state) => state.activeMenu);
     const focusBlock = useOStimStore((state) => state.focusBlock);
+    const settings = useOStimStore((state) => state.settings);
+    useOStimStore((state) => state.updateSettings);
+    const saveLayoutSettings = useOStimStore((state) => state.saveLayoutSettings);
+    const actorPortraits = useOStimStore((state) => state.actorPortraits);
+    useOStimStore((state) => state.updateActorPortrait);
+    useOStimStore((state) => state.clearActorPortraits);
+    Object.keys(actorPortraits).length > 0;
+    const mainBlockRef = reactExports.useRef(null);
     reactExports.useEffect(() => {
       updateActiveMenu("navigation");
     }, []);
     useControls();
     const style = {};
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `ui-container ${focusBlock === "buttons" ? "focus-buttons" : "focus-menu"}`, style, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "buttons-section", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ControlButtons, {}) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ProgressBarContainer, {}),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "menu-section", children: [
-        activeMenu === "navigation" && /* @__PURE__ */ jsxRuntimeExports.jsx(NavigationList, {}),
-        activeMenu === "utilityOptions" && /* @__PURE__ */ jsxRuntimeExports.jsx(UtilityOptionsList, {}),
-        activeMenu === "searchMenu" && /* @__PURE__ */ jsxRuntimeExports.jsx(SearchMenu, {}),
-        activeMenu === "alignMenu" && /* @__PURE__ */ jsxRuntimeExports.jsx(AlignmentMenu, {})
-      ] })
+      false,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          ref: mainBlockRef,
+          className: "hud-block hud-main-block",
+          style: {
+            left: settings.mainBlockX >= 0 ? `${settings.mainBlockX}px` : "1vw",
+            bottom: settings.mainBlockY >= 0 ? `${settings.mainBlockY}px` : "var(--hud-bottom)",
+            transform: `scale(${settings.mainBlockScale / 100})`,
+            transformOrigin: "bottom left"
+          },
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "buttons-section", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ControlButtons, {}) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `menu-section ${(activeMenu === "navigation" || activeMenu === "utilityOptions") && settings.enableGridMenu ? "grid-mode" : ""}`, children: [
+              activeMenu === "navigation" && /* @__PURE__ */ jsxRuntimeExports.jsx(NavigationList, {}),
+              activeMenu === "utilityOptions" && /* @__PURE__ */ jsxRuntimeExports.jsx(UtilityOptionsList, {}),
+              activeMenu === "searchMenu" && /* @__PURE__ */ jsxRuntimeExports.jsx(SearchMenu, {}),
+              activeMenu === "alignMenu" && /* @__PURE__ */ jsxRuntimeExports.jsx(AlignmentMenu, {})
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              BlockLayoutControls,
+              {
+                blockRef: mainBlockRef,
+                scale: settings.mainBlockScale,
+                placement: "bottom-left",
+                gridColumns: settings.enableGridMenu ? settings.gridColumns : void 0,
+                gridRows: settings.enableGridMenu ? settings.gridRows : void 0,
+                onChange: ({ x: x2, y: y2, scale, gridColumns, gridRows }, commit) => saveLayoutSettings(
+                  {
+                    ...x2 !== void 0 ? { mainBlockX: x2 } : {},
+                    ...y2 !== void 0 ? { mainBlockY: y2 } : {},
+                    ...scale !== void 0 ? { mainBlockScale: scale } : {},
+                    ...gridColumns !== void 0 ? { gridColumns } : {},
+                    ...gridRows !== void 0 ? { gridRows } : {}
+                  },
+                  commit
+                )
+              }
+            )
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ProgressBarContainer, {})
     ] });
   }
   const scanCodeToJS = {
@@ -9244,6 +9900,11 @@
       console.log("updateKeys converted:", convertedKeys);
       store2.updateKeys(convertedKeys);
     };
+    window.updateSettings = (settings) => {
+      const parsed = typeof settings === "string" ? JSON.parse(settings) : settings;
+      console.log("updateSettings called with:", parsed);
+      store2.updateSettings(parsed);
+    };
     window.updateSearchResults = (results) => {
       const parsed = typeof results === "string" ? JSON.parse(results) : results;
       store2.updateSearchResults(parsed);
@@ -9256,6 +9917,12 @@
     window.updateExcitements = (data) => {
       const actorsState = typeof data === "string" ? JSON.parse(data) : data;
       store2.updateActorsState(actorsState);
+    };
+    window.updateActorPortrait = (formId, dataUrl) => {
+      store2.updateActorPortrait(formId, dataUrl);
+    };
+    window.clearActorPortraits = () => {
+      store2.clearActorPortraits();
     };
     window.onActorOrgasm = (actorIndex) => {
       store2.pinActorOrgasm(actorIndex);
@@ -9300,8 +9967,15 @@
         if (recentStore.activeMenu === "alignMenu") {
           shouldListenToHold = lowerCaseControl === "left" || lowerCaseControl === "right";
         }
-        if (recentStore.activeMenu === "searchMenu" || recentStore.activeMenu === "navigation" || recentStore.activeMenu === "utilityOptions") {
+        if (recentStore.activeMenu === "searchMenu") {
           shouldListenToHold = lowerCaseControl === "up" || lowerCaseControl === "down";
+        }
+        if (recentStore.activeMenu === "navigation" || recentStore.activeMenu === "utilityOptions") {
+          if (recentStore.settings.enableGridMenu) {
+            shouldListenToHold = lowerCaseControl === "up" || lowerCaseControl === "down" || lowerCaseControl === "left" || lowerCaseControl === "right";
+          } else {
+            shouldListenToHold = lowerCaseControl === "up" || lowerCaseControl === "down";
+          }
         }
       }
       if (shouldListenToHold) {
@@ -9310,13 +9984,21 @@
         }
         stopRepeat();
         activeHoldControl = lowerCaseControl;
+        const initialFocusBlock = recentStore.focusBlock;
         store2.handleControlInput(control);
+        if (useOStimStore.getState().focusBlock !== initialFocusBlock) {
+          return;
+        }
         repeatTimer = setTimeout(() => {
           repeatInterval = setInterval(() => {
             if (activeHoldControl !== lowerCaseControl) {
               return;
             }
+            const prevFocusBlock = useOStimStore.getState().focusBlock;
             store2.handleControlInput(control);
+            if (useOStimStore.getState().focusBlock !== prevFocusBlock) {
+              stopRepeat();
+            }
           }, 50);
         }, 400);
       } else {

@@ -8,7 +8,7 @@ public:
     static Settings* GetSingleton();
 
     void Load();
-    void SaveLayout(int mainX, int mainY, int mainScale, int exciteX, int exciteY, int exciteScale, int cols, int rows);
+    void SaveLayout(int mainX, int mainY, int mainScale, int exciteX, int exciteY, int exciteScale, int cols, int rows, bool enableGrid, bool enablePortraitsVal);
 
     // Hotkeys
     std::vector<uint32_t> toggleFocusKeys;

@@ -62,6 +62,7 @@ export interface ThreadStatus {
 
 export interface UISettings {
     enableGridMenu: boolean;
+    enablePortraits: boolean;
     gridColumns: number;
     gridRows: number;
     mainBlockX: number;

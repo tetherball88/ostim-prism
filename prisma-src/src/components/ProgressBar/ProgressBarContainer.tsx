@@ -38,12 +38,14 @@ export const ProgressBarContainer = () => {
             blockRef={excitementBlockRef}
             scale={settings.excitementBlockScale}
             placement="top-left"
-            onChange={({ x, y, scale }, commit) =>
+            enablePortraits={settings.enablePortraits}
+            onChange={({ x, y, scale, enablePortraits }, commit) =>
               saveLayoutSettings(
                 {
                   ...(x !== undefined ? { excitementBlockX: x } : {}),
                   ...(y !== undefined ? { excitementBlockY: y } : {}),
                   ...(scale !== undefined ? { excitementBlockScale: scale } : {}),
+                  ...(enablePortraits !== undefined ? { enablePortraits } : {}),
                 },
                 commit
               )

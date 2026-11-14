@@ -187,6 +187,10 @@ namespace {
 }
 
 void PortraitManager::Initialize() {
+    if (phantasm != nullptr && clientId != 0) {
+        return;
+    }
+
     if (!Settings::GetSingleton()->enablePortraits) {
         SKSE::log::info("PortraitManager: actor portraits disabled in OStimPrism.ini");
         return;

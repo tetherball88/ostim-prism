@@ -7544,6 +7544,7 @@
   function getInitialSettings() {
     const defaults = {
       enableGridMenu: true,
+      enablePortraits: true,
       gridColumns: 4,
       gridRows: 4,
       mainBlockX: -1,
@@ -7585,7 +7586,9 @@
           excitementBlockY: settings.excitementBlockY,
           excitementBlockScale: settings.excitementBlockScale,
           gridColumns: settings.gridColumns,
-          gridRows: settings.gridRows
+          gridRows: settings.gridRows,
+          enableGridMenu: settings.enableGridMenu,
+          enablePortraits: settings.enablePortraits
         };
         (_a = window.sendAction) == null ? void 0 : _a.call(window, JSON.stringify({
           action: "saveLayout",
@@ -7868,6 +7871,8 @@
     useOStimStore((state) => state.actorsState);
     const formId = useOStimStore((state) => state.actorsState[index].formId);
     const portraitUrl = useOStimStore((state) => formId !== void 0 ? state.actorPortraits[formId] : void 0);
+    const enablePortraits = useOStimStore((state) => state.settings.enablePortraits);
+    const showPortrait = enablePortraits && Boolean(portraitUrl);
     const name = useOStimStore((state) => state.actorsState[index].name);
     const gender = useOStimStore((state) => state.actorsState[index].gender);
     const rawExcitementProgress = useOStimStore((state) => state.actorsState[index].excitementProgress);
@@ -8003,7 +8008,7 @@
         style: { "--pulse-duration": `${pulseDuration}s`, "--glow-color": color },
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "progress-ring-box", children: [
-            portraitUrl && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "progress-portrait", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            showPortrait && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "progress-portrait", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
               "img",
               {
                 className: "progress-portrait-img",
@@ -8085,7 +8090,7 @@
                       style: { color, pointerEvents: "none" }
                     }
                   ),
-                  !portraitUrl && /* Climax icon — fallback when Phantasm is not installed or portrait unavailable */
+                  !showPortrait && /* Climax icon — fallback when Phantasm is not installed or portrait unavailable */
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "rect",
@@ -8136,7 +8141,7 @@
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "progress-label", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "progress-name", children: name }),
-            portraitUrl && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "progress-climax-badge", style: { color }, children: [
+            showPortrait && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "progress-climax-badge", style: { color }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "svg",
                 {
@@ -8285,8 +8290,10 @@
     blockRef,
     scale,
     placement = "top-left",
+    enableGridMenu,
     gridColumns,
     gridRows,
+    enablePortraits,
     onChange
   }) => {
     const [isDragging, setIsDragging] = reactExports.useState(false);
@@ -8481,60 +8488,101 @@
               }
             )
           ] }),
-          gridFields && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "block-grid-controls", children: gridFields.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: "0.3rem" }, children: [
-            idx > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block-grid-sep", children: "×" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block-grid-field", title: item.title, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block-grid-label", children: item.label }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "text",
-                  className: "block-scale-input block-grid-input",
-                  value: item.inputValue,
-                  onFocus: (e) => {
-                    cancelGridBlurRef.current = false;
-                    item.setIsEditing(true);
-                    item.setInputValue(String(item.value));
-                    e.currentTarget.select();
-                  },
-                  onChange: (e) => item.setInputValue(e.target.value),
-                  onBlur: () => {
-                    if (cancelGridBlurRef.current) {
+          (enableGridMenu !== void 0 || gridFields) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "block-grid-controls", children: [
+            enableGridMenu !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                className: `block-toggle-btn ${enableGridMenu ? "active" : ""}`,
+                onClick: () => onChange({ enableGridMenu: !enableGridMenu }, true),
+                title: enableGridMenu ? "Switch to List menu" : "Switch to Grid menu",
+                children: [
+                  enableGridMenu ? /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 16 16", width: "12", height: "12", fill: "currentColor", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "1", y: "1", width: "6", height: "6", rx: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "9", y: "1", width: "6", height: "6", rx: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "1", y: "9", width: "6", height: "6", rx: "1" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "9", y: "9", width: "6", height: "6", rx: "1" })
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 16 16", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "2", y1: "3.5", x2: "14", y2: "3.5" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "2", y1: "8", x2: "14", y2: "8" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "2", y1: "12.5", x2: "14", y2: "12.5" })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: enableGridMenu ? "Grid" : "List" })
+                ]
+              }
+            ),
+            gridFields && gridFields.map((item, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { style: { display: "inline-flex", alignItems: "center", gap: "0.3rem" }, children: [
+              idx > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block-grid-sep", children: "×" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block-grid-field", title: item.title, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block-grid-label", children: item.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "text",
+                    className: "block-scale-input block-grid-input",
+                    value: item.inputValue,
+                    onFocus: (e) => {
                       cancelGridBlurRef.current = false;
-                      return;
-                    }
-                    commitGridInput(
-                      item.inputValue,
-                      item.value,
-                      item.setInputValue,
-                      item.setIsEditing,
-                      item.field
-                    );
-                  },
-                  onKeyDown: (e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") {
-                      e.currentTarget.blur();
-                    } else if (e.key === "Escape") {
-                      cancelGridBlurRef.current = true;
-                      item.setIsEditing(false);
+                      item.setIsEditing(true);
                       item.setInputValue(String(item.value));
-                      e.currentTarget.blur();
-                    } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                      e.preventDefault();
-                      stepGridInput(
+                      e.currentTarget.select();
+                    },
+                    onChange: (e) => item.setInputValue(e.target.value),
+                    onBlur: () => {
+                      if (cancelGridBlurRef.current) {
+                        cancelGridBlurRef.current = false;
+                        return;
+                      }
+                      commitGridInput(
                         item.inputValue,
-                        e.key === "ArrowUp" ? 1 : -1,
                         item.value,
                         item.setInputValue,
+                        item.setIsEditing,
                         item.field
                       );
+                    },
+                    onKeyDown: (e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") {
+                        e.currentTarget.blur();
+                      } else if (e.key === "Escape") {
+                        cancelGridBlurRef.current = true;
+                        item.setIsEditing(false);
+                        item.setInputValue(String(item.value));
+                        e.currentTarget.blur();
+                      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                        e.preventDefault();
+                        stepGridInput(
+                          item.inputValue,
+                          e.key === "ArrowUp" ? 1 : -1,
+                          item.value,
+                          item.setInputValue,
+                          item.field
+                        );
+                      }
                     }
                   }
-                }
-              )
-            ] })
-          ] }, item.field)) })
+                )
+              ] })
+            ] }, item.field))
+          ] }),
+          enablePortraits !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "block-grid-controls", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: `block-toggle-btn ${enablePortraits ? "active" : ""}`,
+              onClick: () => onChange({ enablePortraits: !enablePortraits }, true),
+              title: enablePortraits ? "Hide actor portraits" : "Show actor portraits",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 16 16", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "8", cy: "5.5", r: "2.75" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" }),
+                  !enablePortraits && /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: "2", y1: "2", x2: "14", y2: "14", strokeWidth: "1.8" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: enablePortraits ? "Portraits" : "No Portraits" })
+              ]
+            }
+          ) })
         ]
       }
     );
@@ -8570,11 +8618,13 @@
               blockRef: excitementBlockRef,
               scale: settings.excitementBlockScale,
               placement: "top-left",
-              onChange: ({ x: x2, y: y2, scale }, commit) => saveLayoutSettings(
+              enablePortraits: settings.enablePortraits,
+              onChange: ({ x: x2, y: y2, scale, enablePortraits }, commit) => saveLayoutSettings(
                 {
                   ...x2 !== void 0 ? { excitementBlockX: x2 } : {},
                   ...y2 !== void 0 ? { excitementBlockY: y2 } : {},
-                  ...scale !== void 0 ? { excitementBlockScale: scale } : {}
+                  ...scale !== void 0 ? { excitementBlockScale: scale } : {},
+                  ...enablePortraits !== void 0 ? { enablePortraits } : {}
                 },
                 commit
               )
@@ -9679,13 +9729,15 @@
                 blockRef: mainBlockRef,
                 scale: settings.mainBlockScale,
                 placement: "bottom-left",
+                enableGridMenu: settings.enableGridMenu,
                 gridColumns: settings.enableGridMenu ? settings.gridColumns : void 0,
                 gridRows: settings.enableGridMenu ? settings.gridRows : void 0,
-                onChange: ({ x: x2, y: y2, scale, gridColumns, gridRows }, commit) => saveLayoutSettings(
+                onChange: ({ x: x2, y: y2, scale, enableGridMenu, gridColumns, gridRows }, commit) => saveLayoutSettings(
                   {
                     ...x2 !== void 0 ? { mainBlockX: x2 } : {},
                     ...y2 !== void 0 ? { mainBlockY: y2 } : {},
                     ...scale !== void 0 ? { mainBlockScale: scale } : {},
+                    ...enableGridMenu !== void 0 ? { enableGridMenu } : {},
                     ...gridColumns !== void 0 ? { gridColumns } : {},
                     ...gridRows !== void 0 ? { gridRows } : {}
                   },

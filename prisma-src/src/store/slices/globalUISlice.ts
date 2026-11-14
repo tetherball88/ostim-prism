@@ -9,6 +9,7 @@ const DEV_STORAGE_KEY = 'ostim_prism_layout_settings';
 function getInitialSettings(): UISettings {
     const defaults: UISettings = {
         enableGridMenu: true,
+        enablePortraits: true,
         gridColumns: 4,
         gridRows: 4,
         mainBlockX: -1,
@@ -61,6 +62,8 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 excitementBlockScale: settings.excitementBlockScale,
                 gridColumns: settings.gridColumns,
                 gridRows: settings.gridRows,
+                enableGridMenu: settings.enableGridMenu,
+                enablePortraits: settings.enablePortraits,
             };
             window.sendAction?.(JSON.stringify({
                 action: 'saveLayout',

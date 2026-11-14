@@ -5,10 +5,20 @@ interface BlockLayoutControlsProps {
   blockRef: React.RefObject<HTMLDivElement | null>;
   scale: number;
   placement?: 'top-left' | 'bottom-left';
+  enableGridMenu?: boolean;
   gridColumns?: number;
   gridRows?: number;
+  enablePortraits?: boolean;
   onChange: (
-    update: { x?: number; y?: number; scale?: number; gridColumns?: number; gridRows?: number },
+    update: {
+      x?: number;
+      y?: number;
+      scale?: number;
+      enableGridMenu?: boolean;
+      gridColumns?: number;
+      gridRows?: number;
+      enablePortraits?: boolean;
+    },
     commit: boolean
   ) => void;
 }
@@ -23,8 +33,10 @@ export const BlockLayoutControls: FC<BlockLayoutControlsProps> = ({
   blockRef,
   scale,
   placement = 'top-left',
+  enableGridMenu,
   gridColumns,
   gridRows,
+  enablePortraits,
   onChange,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -247,9 +259,33 @@ export const BlockLayoutControls: FC<BlockLayoutControlsProps> = ({
         </button>
       </div>
 
-      {gridFields && (
+      {(enableGridMenu !== undefined || gridFields) && (
         <div className="block-grid-controls">
-          {gridFields.map((item, idx) => (
+          {enableGridMenu !== undefined && (
+            <button
+              type="button"
+              className={`block-toggle-btn ${enableGridMenu ? 'active' : ''}`}
+              onClick={() => onChange({ enableGridMenu: !enableGridMenu }, true)}
+              title={enableGridMenu ? 'Switch to List menu' : 'Switch to Grid menu'}
+            >
+              {enableGridMenu ? (
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+                  <rect x="1" y="1" width="6" height="6" rx="1" />
+                  <rect x="9" y="1" width="6" height="6" rx="1" />
+                  <rect x="1" y="9" width="6" height="6" rx="1" />
+                  <rect x="9" y="9" width="6" height="6" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <line x1="2" y1="3.5" x2="14" y2="3.5" />
+                  <line x1="2" y1="8" x2="14" y2="8" />
+                  <line x1="2" y1="12.5" x2="14" y2="12.5" />
+                </svg>
+              )}
+              <span>{enableGridMenu ? 'Grid' : 'List'}</span>
+            </button>
+          )}
+          {gridFields && gridFields.map((item, idx) => (
             <span key={item.field} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
               {idx > 0 && <span className="block-grid-sep">×</span>}
               <label className="block-grid-field" title={item.title}>
@@ -302,6 +338,24 @@ export const BlockLayoutControls: FC<BlockLayoutControlsProps> = ({
               </label>
             </span>
           ))}
+        </div>
+      )}
+
+      {enablePortraits !== undefined && (
+        <div className="block-grid-controls">
+          <button
+            type="button"
+            className={`block-toggle-btn ${enablePortraits ? 'active' : ''}`}
+            onClick={() => onChange({ enablePortraits: !enablePortraits }, true)}
+            title={enablePortraits ? 'Hide actor portraits' : 'Show actor portraits'}
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="8" cy="5.5" r="2.75" />
+              <path d="M2.5 14c.8-2.6 2.9-4 5.5-4s4.7 1.4 5.5 4" />
+              {!enablePortraits && <line x1="2" y1="2" x2="14" y2="14" strokeWidth="1.8" />}
+            </svg>
+            <span>{enablePortraits ? 'Portraits' : 'No Portraits'}</span>
+          </button>
         </div>
       )}
     </div>

@@ -108,7 +108,7 @@ void Settings::Load() {
     SKSE::log::info("Tracked menus: {}", trackedMenus.size());
 }
 
-void Settings::SaveLayout(int mainX, int mainY, int mainScale, int exciteX, int exciteY, int exciteScale, int cols, int rows) {
+void Settings::SaveLayout(int mainX, int mainY, int mainScale, int exciteX, int exciteY, int exciteScale, int cols, int rows, bool enableGrid, bool enablePortraitsVal) {
     mainBlockX = mainX;
     mainBlockY = mainY;
     mainBlockScale = std::max(30, std::min(250, mainScale));
@@ -117,6 +117,8 @@ void Settings::SaveLayout(int mainX, int mainY, int mainScale, int exciteX, int 
     excitementBlockScale = std::max(30, std::min(250, exciteScale));
     gridColumns = std::max(1, std::min(12, cols));
     gridRows = std::max(1, std::min(12, rows));
+    enableGridMenu = enableGrid;
+    enablePortraits = enablePortraitsVal;
 
     std::filesystem::path iniPath = std::filesystem::current_path() / "Data/SKSE/Plugins/OStimPrism.ini";
     const std::string iniStr = iniPath.string();
@@ -129,7 +131,9 @@ void Settings::SaveLayout(int mainX, int mainY, int mainScale, int exciteX, int 
     WritePrivateProfileStringA("UIBehaviour", "ExcitementBlockScale", std::to_string(excitementBlockScale).c_str(), iniStr.c_str());
     WritePrivateProfileStringA("UIBehaviour", "GridColumns", std::to_string(gridColumns).c_str(), iniStr.c_str());
     WritePrivateProfileStringA("UIBehaviour", "GridRows", std::to_string(gridRows).c_str(), iniStr.c_str());
+    WritePrivateProfileStringA("UIBehaviour", "EnableGridMenu", enableGridMenu ? "1" : "0", iniStr.c_str());
+    WritePrivateProfileStringA("UIBehaviour", "EnablePortraits", enablePortraits ? "1" : "0", iniStr.c_str());
 
-    SKSE::log::info("Saved UI layout to {}: Main=({}, {}, {}%), Excitement=({}, {}, {}%), Grid=({}x{})",
-        iniStr, mainBlockX, mainBlockY, mainBlockScale, excitementBlockX, excitementBlockY, excitementBlockScale, gridColumns, gridRows);
+    SKSE::log::info("Saved UI layout to {}: Main=({}, {}, {}%), Excitement=({}, {}, {}%), Grid=({}x{}, enabled={}), Portraits={}",
+        iniStr, mainBlockX, mainBlockY, mainBlockScale, excitementBlockX, excitementBlockY, excitementBlockScale, gridColumns, gridRows, enableGridMenu, enablePortraits);
 }

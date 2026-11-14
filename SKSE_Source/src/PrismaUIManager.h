@@ -52,6 +52,7 @@ private:
     MAGELIGHT_API::ModId modId = 0;
     MAGELIGHT_API::ViewId view = 0;
     std::atomic<bool> hasUIMode{false};
+    std::atomic<bool> hasKeyFocus{false};
 
     bool initialized = false;
     uint32_t currentThreadID = INVALID_THREAD_ID;

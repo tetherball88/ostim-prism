@@ -272,6 +272,12 @@ namespace MAGELIGHT_API {
         HostShutdown = 10,    // reserved
         UIModeRefused = 11,   // your RequestUIMode was not entered (a lost race, or the host refused it on the game
                               // thread); detail = why ("low memory" since 1.8.0, see docs/CPP.md)
+        KeyFocusGained = 12,  // (1.9.0, SetViewFocusSharing) your view has the keyboard now, UI mode going on: a
+                              // click on it, or it holds UI mode and the keyboard came back from a view it was shared
+                              // with. x = the view that had it; detail = that view's modId ("" for none)
+        KeyFocusLost = 13,    // (1.9.0) your view no longer has the keyboard (a click elsewhere took it, or it had it
+                              // by a share that ended). x = the view that has it now, 0 when UI mode ended; detail =
+                              // that view's modId ("" for none)
     };
 
     struct EventData {
@@ -353,6 +359,12 @@ namespace MAGELIGHT_API {
                                                             // PolledKeysConfig for a narrower rule). A switch to
                                                             // another of your views takes the new request's flag.
                                                             // Ignored before 1.8.0 (gate on "polledKeys").
+
+    // Flags for SetViewFocusSharing (1.9.0).
+    inline constexpr std::uint32_t kFocusShareGive = 1;   // while this view holds UI mode, a click on a view that
+                                                            // takes moves the keyboard there
+    inline constexpr std::uint32_t kFocusShareTake = 2;   // a click on this view takes the keyboard from a view
+                                                            // that holds UI mode and gives
 
     // ── VR (0.18.0) ────────────────────────────────────────────────────────
     // Per-view placement in the headset. mode: 0 HeadLocked (glued to the head
@@ -634,7 +646,7 @@ namespace MAGELIGHT_API {
                                                             // turn 0 for the session when the renderer starts,
                                                             // never back; see the threading contract; 0 in VR),
                                                             // "mainMenu" (1.7.1: follows "pageThread"),
-                                                            // "polledKeys" (1.8.0). The
+                                                            // "polledKeys" (1.8.0), "focusShare" (1.9.0). The
                                                             // page-injected window.__MAGELIGHT__.capabilities
                                                             // (SDK: host.can) and the SDK mock carry this same
                                                             // set under the camelCase spellings shown (the page
@@ -649,7 +661,9 @@ namespace MAGELIGHT_API {
         Result (*BindHotkey)(ViewId view, std::uint32_t dxScancode, std::uint32_t action);  // kHotkeyAction*; Busy names
                                                             // the mod holding the key, Denied = the host's toggle key.
                                                             // Fires on key-down outside engine menus/console/text entry;
-                                                            // while a page has key focus only ITS OWN key fires (close)
+                                                            // while a page has key focus only ITS OWN key fires (close),
+                                                            // and not even that while it has shared the keyboard
+                                                            // (1.9.0); a ToggleVisible binding fires either way
         Result (*RegisterTextureImageEx)(ModId mod, const char* name, ID3D11ShaderResourceView* srv,
                                          std::uint32_t width, std::uint32_t height, ImageId* out);
 
@@ -750,6 +764,8 @@ namespace MAGELIGHT_API {
         // key (keydown/keyup) and does NOT leave UI mode — for a modal or an
         // editing control that closes itself. Clear it to hand Escape back.
         // A page can do the same without C++: magelight.send('__escapecapture','1'|'0').
+        // From 1.9.0 the keyboard's Escape asks the view that has the keyboard
+        // (SetViewFocusSharing); the gamepad's B asks the view holding UI mode.
         Result (*SetEscapeCapture)(ViewId view, bool capture);
         // Host the Web Inspector for a page (needs the runtime's inspector assets).
         Result (*ShowInspector)(ViewId view, bool show);
@@ -868,8 +884,9 @@ namespace MAGELIGHT_API {
         Result (*RebuildViewAtScale)(ViewId view, float scale);
         // ── appended in 0.31.9 — gate on hostVersionNumber >= 3109 and QueryCapability("keyboardtheme") ──
         // Magelight's own VR keyboard in your colours (see KeyboardTheme)
-        // whenever it is raised while this view holds UI mode; another view
-        // in UI mode shows its own theme or the host's look. Kept until
+        // whenever it is raised while this view has the keyboard (it holds UI
+        // mode, or from 1.9.0 the keyboard was shared with it); another view
+        // shows its own theme or the host's look. Kept until
         // changed or the view is destroyed (hibernation and RebuildViewAtScale
         // keep it); nullptr gives the host's look back. A page can set the same
         // slot with magelight.hostTheme(). The keyboard shows only on VR
@@ -956,6 +973,22 @@ namespace MAGELIGHT_API {
         // is empty, a path or not a .dll, or a key outside 1-254
         // (GetLastErrorMessage says which). Nothing changes on a failure.
         Result (*SetViewPolledKeys)(ViewId view, const PolledKeysConfig* config);
+
+        // ── appended in 1.9.0 — gate on hostVersionNumber >= 10900 and QueryCapability("focusShare") ──
+        // The keyboard shared between views while one holds UI mode, both opting in. kFocusShareGive on the view
+        // that holds UI mode lets a left click (or a VR trigger) on a view that set kFocusShareTake, any mod's, move
+        // the keyboard there: keys, typed text, the IME, the keyboard's Escape and the page's focus go to that view,
+        // while UI mode itself (the cursor, the pause, the gamepad and its keys, which plugins may read keys, who owns
+        // it) stays the holder's. A click on the holder's view, or on another view that takes, moves the keyboard
+        // again. It goes back to the holder's view when the holder stops giving, or the view that has it stops
+        // taking, is hidden, destroyed or rebuilt (RebuildViewAtScale), and the share ends when UI mode starts, moves
+        // or ends. Escape still closes UI mode unless the page that has the keyboard captured it (SetEscapeCapture).
+        // While the keyboard is shared no UI-mode hotkey fires, the holder's close included (a VR binding still
+        // does); a ToggleVisible binding fires either way. Each move sends KeyFocusGained and KeyFocusLost to the
+        // views' mods. Kept across reloads, hibernation and RebuildViewAtScale, ended by DestroyView; manifest
+        // "shareFocus" and "acceptFocus" set it too. 0 turns both off (the default). Any thread. InvalidView for a
+        // view that is gone or an inspector; InvalidArgument for another bit.
+        Result (*SetViewFocusSharing)(ViewId view, std::uint32_t flags);
     };
 
     inline constexpr std::uint32_t PackVersion(std::uint32_t major, std::uint32_t minor, std::uint32_t patch)

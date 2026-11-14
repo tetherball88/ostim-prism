@@ -208,10 +208,10 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    // When the view holds Magelight UI mode, keyboard events are delivered directly
+    // When the view holds Magelight UI mode (or shared keyboard focus), keyboard events are delivered directly
     // to the web page (which handles them in useControls.ts) while Magelight mutes
     // DirectInput and GetAsyncKeyState for other mods.
-    if (HasFocus()) {
+    if (HasFocus() || hasKeyFocus.load()) {
         return RE::BSEventNotifyControl::kContinue;
     }
 
@@ -396,6 +396,10 @@ void PrismaUIManager::Initialize() {
         magelight->SetViewPrepaint(view, true);
     }
 
+    if (magelight->hostVersionNumber >= 10900 && magelight->QueryCapability("focusShare") == 1) {
+        magelight->SetViewFocusSharing(view, MAGELIGHT_API::kFocusShareGive | MAGELIGHT_API::kFocusShareTake);
+    }
+
     SKSE::log::info("Magelight persistent view created: {} ({})", newView, pagePath);
 
     StartListeningModEvents();
@@ -497,7 +501,7 @@ void PrismaUIManager::ApplyVisibility() {
 void PrismaUIManager::CheckIdleTimeout() {
     // Don't accumulate idle state while a menu is open, user hid the UI, or UI mode is active
     if (!IsViewValid() || currentThreadID == INVALID_THREAD_ID || hiddenByMenu || hiddenByUser) return;
-    if (HasFocus()) {
+    if (HasFocus() || hasKeyFocus.load()) {
         ResetIdleTimer();
         return;
     }
@@ -592,6 +596,7 @@ void PrismaUIManager::UpdateSettings()
 
     json j = {
         {"enableGridMenu", settings->enableGridMenu},
+        {"enablePortraits", settings->enablePortraits},
         {"gridColumns", settings->gridColumns},
         {"gridRows", settings->gridRows},
         {"mainBlockX", settings->mainBlockX},
@@ -821,6 +826,7 @@ void PrismaUIManager::OnMagelightEvent(const MAGELIGHT_API::EventData* ev, void*
         case MAGELIGHT_API::Event::UIModeEntered: {
             if (ev->view == manager->view) {
                 manager->hasUIMode.store(true);
+                manager->hasKeyFocus.store(true);
                 manager->ResetIdleTimer();
                 SKSE::log::info("Magelight UI mode entered for view {}", ev->view);
                 if (manager->currentThreadID == INVALID_THREAD_ID || manager->hiddenByMenu || manager->hiddenByUser) {
@@ -833,9 +839,29 @@ void PrismaUIManager::OnMagelightEvent(const MAGELIGHT_API::EventData* ev, void*
         case MAGELIGHT_API::Event::UIModeExited:
         case MAGELIGHT_API::Event::UIModeRefused: {
             manager->hasUIMode.store(false);
+            manager->hasKeyFocus.store(false);
             manager->ResetIdleTimer();
             SKSE::log::info("Magelight UI mode exited/refused (view={}, detail='{}')",
                 ev->view, ev->detail ? ev->detail : "");
+            break;
+        }
+
+        case MAGELIGHT_API::Event::KeyFocusGained: {
+            if (ev->view == manager->view) {
+                manager->hasKeyFocus.store(true);
+                manager->ResetIdleTimer();
+                SKSE::log::debug("Magelight key focus gained for view {} (from view {}, mod='{}')",
+                    ev->view, ev->x, ev->detail ? ev->detail : "");
+            }
+            break;
+        }
+
+        case MAGELIGHT_API::Event::KeyFocusLost: {
+            if (ev->view == manager->view) {
+                manager->hasKeyFocus.store(false);
+                SKSE::log::debug("Magelight key focus lost for view {} (to view {}, mod='{}')",
+                    ev->view, ev->x, ev->detail ? ev->detail : "");
+            }
             break;
         }
 
@@ -1126,7 +1152,16 @@ void PrismaUIManager::HandleActionOnGameThread(const std::string& data) {
             int exciteScale = payload.value("excitementBlockScale", settings->excitementBlockScale);
             int cols = payload.value("gridColumns", settings->gridColumns);
             int rows = payload.value("gridRows", settings->gridRows);
-            settings->SaveLayout(mainX, mainY, mainScale, exciteX, exciteY, exciteScale, cols, rows);
+            bool enableGrid = payload.value("enableGridMenu", settings->enableGridMenu);
+            bool prevPortraits = settings->enablePortraits;
+            bool enablePortraits = payload.value("enablePortraits", settings->enablePortraits);
+            settings->SaveLayout(mainX, mainY, mainScale, exciteX, exciteY, exciteScale, cols, rows, enableGrid, enablePortraits);
+            if (enablePortraits && !prevPortraits) {
+                PortraitManager::GetSingleton()->Initialize();
+                UpdateExcitements(true);
+            } else if (!enablePortraits && prevPortraits) {
+                ClearActorPortraits();
+            }
         } else {
             SKSE::log::warn("Magelight UI unknown action: {}", action);
         }

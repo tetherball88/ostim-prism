@@ -21,6 +21,8 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
   const actors = useOStimStore(state => state.actorsState);
   const formId = useOStimStore(state => state.actorsState[index].formId);
   const portraitUrl = useOStimStore(state => (formId !== undefined ? state.actorPortraits[formId] : undefined));
+  const enablePortraits = useOStimStore(state => state.settings.enablePortraits);
+  const showPortrait = enablePortraits && Boolean(portraitUrl);
   const name = useOStimStore(state => state.actorsState[index].name);
   const gender = useOStimStore(state => state.actorsState[index].gender);
   const rawExcitementProgress = useOStimStore(state => state.actorsState[index].excitementProgress);
@@ -214,7 +216,7 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
       style={{ '--pulse-duration': `${pulseDuration}s`, '--glow-color': color } as React.CSSProperties}
     >
       <div className="progress-ring-box">
-        {portraitUrl && (
+        {showPortrait && (
           <div className="progress-portrait">
             <img
               className="progress-portrait-img"
@@ -289,7 +291,7 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
               style={{ color, pointerEvents: 'none' }}
             />
           )}
-          {!portraitUrl && (
+          {!showPortrait && (
             /* Climax icon — fallback when Phantasm is not installed or portrait unavailable */
             <g>
               {/* Invisible hit area spanning the whole icon+text row */}
@@ -332,7 +334,7 @@ export const ProgressBar: FC<ProgressBarProps> = ({ index }) => {
       </div>
       <div className="progress-label">
         <span className="progress-name">{name}</span>
-        {portraitUrl && (
+        {showPortrait && (
           <span className="progress-climax-badge" style={{ color }}>
             <svg
               className="progress-climax-icon"

@@ -151,14 +151,16 @@ function App() {
             blockRef={mainBlockRef}
             scale={settings.mainBlockScale}
             placement="bottom-left"
+            enableGridMenu={settings.enableGridMenu}
             gridColumns={settings.enableGridMenu ? settings.gridColumns : undefined}
             gridRows={settings.enableGridMenu ? settings.gridRows : undefined}
-            onChange={({ x, y, scale, gridColumns, gridRows }, commit) =>
+            onChange={({ x, y, scale, enableGridMenu, gridColumns, gridRows }, commit) =>
               saveLayoutSettings(
                 {
                   ...(x !== undefined ? { mainBlockX: x } : {}),
                   ...(y !== undefined ? { mainBlockY: y } : {}),
                   ...(scale !== undefined ? { mainBlockScale: scale } : {}),
+                  ...(enableGridMenu !== undefined ? { enableGridMenu } : {}),
                   ...(gridColumns !== undefined ? { gridColumns } : {}),
                   ...(gridRows !== undefined ? { gridRows } : {}),
                 },

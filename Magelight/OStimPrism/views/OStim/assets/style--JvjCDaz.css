@@ -341,6 +341,36 @@
 .block-grid-input {
     width: 2.2rem;
 }
+
+.block-toggle-btn {
+    height: 1.65rem;
+    padding: 0 0.45rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.block-toggle-btn:hover {
+    background: var(--amber-glow);
+    border-color: var(--amber);
+    color: #fff;
+}
+
+.block-toggle-btn.active {
+    background: rgba(200, 168, 75, 0.22);
+    border-color: var(--amber);
+    color: #fff;
+}
 .progress-bar-container {
     position: fixed;
     bottom: 20px;

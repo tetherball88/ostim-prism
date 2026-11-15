@@ -27,10 +27,10 @@ OStim Prism has migrated from Prisma UI to [b]Magelight UI[/b] for smoother rend
 [size=5][color=#f4a261][b]🎮 Quick-Start Guide[/b][/color][/size]
 
 [size=3][b][color=#64b5f6]1. Switching Between Game & UI Focus[/color][/b][/size]
-Press [b]Left Alt[/b] (customizable in [font=Courier New]OStimPrism.ini[/font]) at any time during a scene to toggle UI Focus:
+Press [b]Left Alt[/b] (optional and customizable in [font=Courier New]OStimPrism.ini[/font], including gamepad codes like [i]279[/i] for Gamepad Y) at any time during a scene to toggle UI Focus:
 [list]
-[*][b]Unfocused (Game Mode):[/b] Standard OStim Standalone keyboard controls.[/*]
-[*][b]Focused (Cursor Mode):[/b] A cursor appears and your mouse, keyboard, and controller inputs go directly to OStim Prism so you can click buttons, scroll, or type in Search without triggering Skyrim hotkeys.[/*]
+[*][b]Unfocused (Game Mode):[/b] Standard OStim Standalone controls—works directly with your configured OStim MCM keyboard, mouse, or controller bindings (including Complete Controller Setup / Gamepad++ setups) without needing to toggle Focus Mode.[/*]
+[*][b]Focused (Cursor / Pad Mode):[/b] Optional mode where a cursor appears and your mouse, keyboard, and controller inputs (D-Pad / Left Stick to navigate, A / Enter to select, Right-Stick click to toggle gamepad cursor for dragging/scaling panels, B / Esc to exit) go directly to OStim Prism without triggering Skyrim hotkeys.[/*]
 [/list]
 
 [size=3][b][color=#64b5f6]2. Customizing Your Layout (Drag, Scale, Grid, Portraits)[/color][/b][/size]
@@ -79,10 +79,10 @@ OStim Prism keeps OStim's familiar controls and splits the main panel into two a
 Most layout options can be changed directly in-game using the hover toolbars, which update [font=Courier New]Data\SKSE\Plugins\OStimPrism.ini[/font] automatically. You can also edit it manually for extra options:
 
 [list]
-[*][b][Hotkeys][/b] (uses standard Skyrim DXScanCodes)
+[*][b][Hotkeys][/b] (uses standard Skyrim DXScanCodes: keyboard 1–255, mouse 256–265, gamepad 266–281)
 [list]
-[*][b]ToggleFocus:[/b] Key to toggle UI Focus / cursor mode (Default: [i]56[/i] / Left Alt).[/*]
-[*][b]ToggleInspector:[/b] Key to open the WebUI developer inspector (Default: [i]157[/i] / Right Ctrl).[/*]
+[*][b]ToggleFocus:[/b] Optional key/button to toggle UI Focus / cursor mode (Default: [i]56[/i] / Left Alt; e.g. [i]279[/i] for Gamepad Y).[/*]
+[*][b]ToggleInspector:[/b] Key/button to open the WebUI developer inspector (Default: [i]157[/i] / Right Ctrl).[/*]
 [/list]
 [/*]
 [*][b][UIBehaviour][/b]

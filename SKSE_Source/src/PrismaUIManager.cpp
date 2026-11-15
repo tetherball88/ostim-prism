@@ -3,11 +3,54 @@
 #include "Settings.h"
 #include <thread>
 #include <chrono>
+#include <cstdlib>
 #include <Windows.h>
 #include <algorithm>
 #include <filesystem>
 
 namespace {
+    int64_t SteadyNowMs() {
+        auto now = std::chrono::steady_clock::now().time_since_epoch();
+        return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    }
+
+    uint32_t GamepadMaskToKeyCode(uint32_t mask) {
+        switch (mask) {
+            case 0x0001: return 266;
+            case 0x0002: return 267;
+            case 0x0004: return 268;
+            case 0x0008: return 269;
+            case 0x0010: return 270;
+            case 0x0020: return 271;
+            case 0x0040: return 272;
+            case 0x0080: return 273;
+            case 0x0100: return 274;
+            case 0x0200: return 275;
+            case 0x1000: return 276;
+            case 0x2000: return 277;
+            case 0x4000: return 278;
+            case 0x8000: return 279;
+            case 0x0009: return 280;
+            case 0x000A: return 281;
+            default:     return 0;
+        }
+    }
+
+    uint32_t GetSkyrimKeyCode(const RE::ButtonEvent* button) {
+        if (!button) return 0;
+        const uint32_t id = button->GetIDCode();
+        switch (button->GetDevice()) {
+            case RE::INPUT_DEVICE::kKeyboard:
+                return (id > 0 && id < 256) ? id : 0;
+            case RE::INPUT_DEVICE::kMouse:
+                return (id < 10) ? (256u + id) : 0;
+            case RE::INPUT_DEVICE::kGamepad:
+                return GamepadMaskToKeyCode(id);
+            default:
+                return 0;
+        }
+    }
+
     void SetCrosshairTarget(bool hasTarget) {
         auto ui = RE::UI::GetSingleton();
         if (!ui) return;
@@ -221,11 +264,14 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
         }
 
         auto button = event->AsButtonEvent();
-        if (!button || button->GetDevice() != RE::INPUT_DEVICE::kKeyboard) {
+        if (!button) {
             continue;
         }
 
-        auto key = button->GetIDCode();
+        const uint32_t key = GetSkyrimKeyCode(button);
+        if (key == 0 || key >= 282) {
+            continue;
+        }
 
         // Ignore hotkeys while a tracked menu (e.g. Console) is open or no scene is active
         if (currentThreadID == INVALID_THREAD_ID || openMenuCount > 0 || hiddenByMenu) {
@@ -262,12 +308,14 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
             // Check if this is an OStim-bound key — if so, count it as activity
             if (button->IsDown()) {
                 const std::initializer_list<uint32_t> ostimKeys = {
-                    (uint32_t)cachedKeys.keyUp,   (uint32_t)cachedKeys.keyDown,
-                    (uint32_t)cachedKeys.keyLeft,  (uint32_t)cachedKeys.keyRight,
-                    (uint32_t)cachedKeys.keyYes,   (uint32_t)cachedKeys.keyEnd,
-                    (uint32_t)cachedKeys.keyToggle,(uint32_t)cachedKeys.keySearch,
+                    (uint32_t)cachedKeys.keyUp,       (uint32_t)cachedKeys.keyDown,
+                    (uint32_t)cachedKeys.keyLeft,     (uint32_t)cachedKeys.keyRight,
+                    (uint32_t)cachedKeys.keyYes,      (uint32_t)cachedKeys.keyEnd,
+                    (uint32_t)cachedKeys.keyToggle,   (uint32_t)cachedKeys.keySearch,
                     (uint32_t)cachedKeys.keyAlignment,(uint32_t)cachedKeys.keyHideUI,
-                    (uint32_t)cachedKeys.keySpeedUp,(uint32_t)cachedKeys.keySpeedDown,
+                    (uint32_t)cachedKeys.keySpeedUp,  (uint32_t)cachedKeys.keySpeedDown,
+                    (uint32_t)cachedKeys.keyPullOut,  (uint32_t)cachedKeys.keyAutoMode,
+                    (uint32_t)cachedKeys.keyFreeCam,
                     KEY_ESCAPE, KEY_TAB,
                 };
                 if (std::find(ostimKeys.begin(), ostimKeys.end(), key) != ostimKeys.end()) {
@@ -277,26 +325,47 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
 
             // Directional/Yes keys: use handleControlStart/End for hold-to-repeat
             const char* controlStr = nullptr;
-            if      (key == (uint32_t)cachedKeys.keyUp)     controlStr = "up";
-            else if (key == (uint32_t)cachedKeys.keyDown)   controlStr = "down";
-            else if (key == (uint32_t)cachedKeys.keyLeft)   controlStr = "left";
-            else if (key == (uint32_t)cachedKeys.keyRight)  controlStr = "right";
-            else if (key == (uint32_t)cachedKeys.keyYes)    controlStr = "yes";
-            else if (key == (uint32_t)cachedKeys.keyToggle) controlStr = "toggle";
-            else if (key == (uint32_t)cachedKeys.keyEnd)    controlStr = "no";
-            else if (key == (uint32_t)cachedKeys.keyHideUI) {
+            if (key == (uint32_t)cachedKeys.keyUp) {
+                controlStr = "up";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::Up);
+            } else if (key == (uint32_t)cachedKeys.keyDown) {
+                controlStr = "down";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::Down);
+            } else if (key == (uint32_t)cachedKeys.keyLeft) {
+                controlStr = "left";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::Left);
+            } else if (key == (uint32_t)cachedKeys.keyRight) {
+                controlStr = "right";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::Right);
+            } else if (key == (uint32_t)cachedKeys.keyYes) {
+                controlStr = "yes";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::Yes);
+            } else if (key == (uint32_t)cachedKeys.keyToggle) {
+                controlStr = "toggle";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::Toggle);
+            } else if (key == (uint32_t)cachedKeys.keyEnd) {
+                controlStr = "no";
+                if (button->IsDown()) NoteDirectControl(OstimNG_API::Thread::Controls::No);
+            } else if (key == (uint32_t)cachedKeys.keyHideUI) {
                 if (button->IsDown()) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::KEY_HIDE);
                     ToggleHideUI();
                 }
             } else if (key == (uint32_t)cachedKeys.keySearch) {
                 if (button->IsDown()) {
-                    SKSE::log::info("Opening Search Menu");
-                    magelight->InvokeJS(view, "showMenu('searchMenu')");
+                    NoteDirectControl(OstimNG_API::Thread::Controls::SearchMenu);
+                    if (!hiddenByUser) {
+                        SKSE::log::info("Opening Search Menu");
+                        magelight->InvokeJS(view, "showMenu('searchMenu')");
+                    }
                 }
             } else if (key == (uint32_t)cachedKeys.keyAlignment) {
                 if (button->IsDown()) {
-                    SKSE::log::info("Opening Alignment Menu");
-                    magelight->InvokeJS(view, "showMenu('alignMenu')");
+                    NoteDirectControl(OstimNG_API::Thread::Controls::AlignMenu);
+                    if (!hiddenByUser) {
+                        SKSE::log::info("Opening Alignment Menu");
+                        magelight->InvokeJS(view, "showMenu('alignMenu')");
+                    }
                 }
             }
             else if (key == KEY_ESCAPE) controlStr = "esc";
@@ -387,7 +456,7 @@ void PrismaUIManager::Initialize() {
         MAGELIGHT_API::GamepadConfig pad{};
         pad.size = sizeof(pad);
         pad.enabled = true;
-        pad.style = MAGELIGHT_API::kGamepadStyleKeys;
+        pad.style = MAGELIGHT_API::kGamepadStyleNavigation;
         pad.allowCursor = true;
         magelight->SetViewGamepad(view, &pad);
     }
@@ -752,6 +821,100 @@ void PrismaUIManager::UpdateThreadStatus() {
 
     std::string statusScript = "updateThreadStatus(" + statusJson.dump() + ")";
     magelight->InvokeJS(view, statusScript.c_str());
+}
+
+void PrismaUIManager::NoteDirectControl(OstimNG_API::Thread::Controls control) {
+    const auto idx = static_cast<size_t>(control);
+    if (idx < lastDirectControlMs.size()) {
+        lastDirectControlMs[idx].store(SteadyNowMs(), std::memory_order_relaxed);
+    }
+}
+
+bool PrismaUIManager::WasRecentlyHandledDirectly(OstimNG_API::Thread::Controls control, int64_t eventTimeMs) const {
+    const auto idx = static_cast<size_t>(control);
+    if (idx >= lastDirectControlMs.size()) {
+        return false;
+    }
+    const int64_t lastMs = lastDirectControlMs[idx].load(std::memory_order_relaxed);
+    return lastMs > 0 && std::abs(eventTimeMs - lastMs) < 80;
+}
+
+void PrismaUIManager::OnControlEvent(OstimNG_API::Thread::Controls controlType, uint32_t threadID, void* /*userData*/) {
+    if (threadID != 0) {
+        return;
+    }
+
+    const int64_t eventTimeMs = SteadyNowMs();
+    SKSE::GetTaskInterface()->AddTask([controlType, threadID, eventTimeMs]() {
+        if (threadID != 0) {
+            return;
+        }
+
+        auto* manager = GetSingleton();
+        if (!manager || !manager->IsViewValid()) {
+            return;
+        }
+
+        if (manager->currentThreadID != 0 || manager->openMenuCount > 0 || manager->hiddenByMenu) {
+            return;
+        }
+
+        if (manager->HasFocus() || manager->hasKeyFocus.load()) {
+            return;
+        }
+
+        if (manager->WasRecentlyHandledDirectly(controlType, eventTimeMs)) {
+            return;
+        }
+
+        manager->ResetIdleTimer();
+        manager->UpdateKeys();
+
+        using Controls = OstimNG_API::Thread::Controls;
+        switch (controlType) {
+            case Controls::Up:
+                manager->magelight->InvokeJS(manager->view, "handleControl('up')");
+                break;
+            case Controls::Down:
+                manager->magelight->InvokeJS(manager->view, "handleControl('down')");
+                break;
+            case Controls::Left:
+                manager->magelight->InvokeJS(manager->view, "handleControl('left')");
+                break;
+            case Controls::Right:
+                manager->magelight->InvokeJS(manager->view, "handleControl('right')");
+                break;
+            case Controls::Yes:
+                manager->magelight->InvokeJS(manager->view, "handleControl('yes')");
+                break;
+            case Controls::Toggle:
+                manager->magelight->InvokeJS(manager->view, "handleControl('toggle')");
+                break;
+            case Controls::No:
+                manager->magelight->InvokeJS(manager->view, "handleControl('no')");
+                break;
+            case Controls::Menu:
+                if (!manager->hiddenByUser) {
+                    manager->magelight->InvokeJS(manager->view, "showMenu('utilityOptions')");
+                }
+                break;
+            case Controls::KEY_HIDE:
+                manager->ToggleHideUI();
+                break;
+            case Controls::AlignMenu:
+                if (!manager->hiddenByUser) {
+                    manager->magelight->InvokeJS(manager->view, "showMenu('alignMenu')");
+                }
+                break;
+            case Controls::SearchMenu:
+                if (!manager->hiddenByUser) {
+                    manager->magelight->InvokeJS(manager->view, "showMenu('searchMenu')");
+                }
+                break;
+            default:
+                break;
+        }
+    });
 }
 
 void PrismaUIManager::OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, uint32_t threadID, void* /*userData*/) {

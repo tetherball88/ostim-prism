@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.0.1
+
+### Added
+
+- **Play Directly with a Controller or Mouse (No Focus Mode Required)** — You can now browse and control scenes right away using the controller, mouse, or keyboard buttons configured in your OStim MCM, without needing to switch into Focus / Cursor Mode first. Also works seamlessly with controller remapping mods like **Complete Controller Setup** and **Gamepad++**.
+- **Right-Stick Scrolling & Arrow Key Support in Focus Mode** — When Focus Mode is active, you can now scroll long lists and icon grids with the controller's Right Stick, toggle the gamepad cursor by clicking the Right Stick to drag or resize panels, and navigate with standard keyboard **Arrow Keys** and **Enter** in addition to your OStim hotkeys.
+
+### Fixed
+
+- **Controller & Mouse Hotkeys in `OStimPrism.ini`** — Fixed `ToggleFocus` and `ToggleInspector` ignoring controller and mouse button codes (such as setting `ToggleFocus = 279` for the controller Y button).
+- **Exiting Menus & Focus Mode Cleanly** — Fixed getting stuck in Focus Mode or inside the Search and Alignment menus; pressing **B** on a controller or **Esc** on a keyboard now cleanly backs out of submenus and exits Focus Mode, and the Alignment menu's **Close** button now properly closes the menu.
+- **HUD Auto-Hide Wakeup** — Using OStim's Pull Out, Auto-Mode, or FreeCam controls now counts as activity so the HUD wakes back up and resets its idle timer.
+
+---
+
 ## v2.0.0
 
 ### Added

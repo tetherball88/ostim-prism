@@ -3,6 +3,7 @@
 #include "MagelightUI_API.h"
 #include "OStimDataProvider.h"
 #include "OstimNG-API-Thread.h"
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <string>
@@ -44,6 +45,7 @@ public:
     RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) override;
 
     static void OnThreadEvent(OstimNG_API::Thread::ThreadEvent eventType, uint32_t threadID, void* userData);
+    static void OnControlEvent(OstimNG_API::Thread::Controls controlType, uint32_t threadID, void* userData);
 
     static constexpr uint32_t INVALID_THREAD_ID = 0xFFFFFFFF;
 
@@ -69,6 +71,10 @@ private:
     std::atomic<int64_t> lastActivityTime{0};
     OStimDataProvider::KeyData cachedKeys{};
     bool hasCachedKeys = false;
+    std::array<std::atomic<int64_t>, 16> lastDirectControlMs{};
+
+    void NoteDirectControl(OstimNG_API::Thread::Controls control);
+    bool WasRecentlyHandledDirectly(OstimNG_API::Thread::Controls control, int64_t eventTimeMs) const;
 
     void StartPolling();
     void StopPolling();

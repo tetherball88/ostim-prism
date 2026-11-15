@@ -101,6 +101,7 @@ SKSEPluginLoad(const LoadInterface* skse) {
                             
                             // Only disable OStim's Flash UI if Magelight UI is actually available
                             if (PrismaUIManager::GetSingleton()->IsAvailable()) {
+                                threadAPI->RegisterControlCallback(PrismaUIManager::OnControlEvent, nullptr);
                                 threadAPI->SetExternalUIEnabled(true);
                                 SKSE::log::info("Registered OStim callbacks and enabled external UI (Magelight UI available)");
                             } else {

@@ -113,8 +113,16 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
             else if (lowerCaseControl === 'down') state.moveControlButtonsFocus(-1);
             else if (lowerCaseControl === 'yes') state.updateActiveMenu(state.controlButtons.buttons[state.controlButtons.activeIndex]?.id || 'navigation');
             else if (lowerCaseControl === 'right') state.setFocusBlock('menu');
-            else if (lowerCaseControl === 'esc' && (activeMenu === 'alignMenu' || activeMenu === 'searchMenu')) {
-                state.updateActiveMenu('navigation');
+            else if (lowerCaseControl === 'esc' || lowerCaseControl === 'no') {
+                if (activeMenu !== 'navigation') {
+                    state.updateActiveMenu('navigation');
+                } else if (lowerCaseControl === 'esc') {
+                    window.sendAction?.(JSON.stringify({
+                        action: 'focus',
+                        payload: { shouldFocus: false }
+                    }));
+                    state.setFocusBlock('menu');
+                }
             }
         } else {
             if (activeMenu === 'alignMenu') {
@@ -130,6 +138,7 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 else if (lowerCaseControl === 'down') state.moveAlignmentField(1);
                 else if (isCloseButton) {
                     if (lowerCaseControl === 'yes' || lowerCaseControl === 'enter') {
+                        state.updateActiveMenu('navigation');
                         state.setFocusBlock('buttons');
                         state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex(b => b.id === 'alignMenu'));
                     }
@@ -152,8 +161,9 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
 
                         state.updateAlignmentField({ index: state.alignment.activeField, value: nextValue, type: "alignmentData" });
                     }
-                } else if(lowerCaseControl === 'esc' || lowerCaseControl === 'tab') {
+                } else if (lowerCaseControl === 'esc' || lowerCaseControl === 'tab' || lowerCaseControl === 'no') {
                     console.log("Closing alignment menu with control input:", control);
+                    state.updateActiveMenu('navigation');
                     state.setFocusBlock('buttons');
                     state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex(b => b.id === 'alignMenu'));
                 }
@@ -168,12 +178,23 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 if (lowerCaseControl === 'up') {
                     state.moveSearchFocus(-1);
                 } else if (lowerCaseControl === 'down') state.moveSearchFocus(1);
-                else if(lowerCaseControl === 'left' || lowerCaseControl === 'esc' || lowerCaseControl === 'tab') {
+                else if (lowerCaseControl === 'left') {
+                    state.setFocusBlock('buttons');
+                    state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex(b => b.id === 'searchMenu'));
+                } else if (lowerCaseControl === 'esc' || lowerCaseControl === 'tab' || lowerCaseControl === 'no') {
+                    state.updateActiveMenu('navigation');
                     state.setFocusBlock('buttons');
                     state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex(b => b.id === 'searchMenu'));
                 }
                 else if (lowerCaseControl === 'yes') state.selectSearchResult();
             } else if (activeMenu === 'navigation') {
+                if (lowerCaseControl === 'esc') {
+                    window.sendAction?.(JSON.stringify({
+                        action: 'focus',
+                        payload: { shouldFocus: false }
+                    }));
+                    return;
+                }
                 if (state.settings.enableGridMenu) {
                     if (lowerCaseControl === 'up' || lowerCaseControl === 'down' || lowerCaseControl === 'right') {
                         state.moveNavigationGridFocus(lowerCaseControl);
@@ -194,6 +215,13 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                     else if (lowerCaseControl === 'yes') state.selectNavigationOption();
                 }
             } else if (activeMenu === 'utilityOptions') {
+                if (lowerCaseControl === 'esc' || lowerCaseControl === 'no') {
+                    window.sendAction?.(JSON.stringify({
+                        action: 'selectOption',
+                        payload: { index: -1 }
+                    }));
+                    return;
+                }
                 if (state.settings.enableGridMenu) {
                     if (lowerCaseControl === 'up' || lowerCaseControl === 'down' || lowerCaseControl === 'right') {
                         state.moveUtilityOptionsGridFocus(lowerCaseControl);

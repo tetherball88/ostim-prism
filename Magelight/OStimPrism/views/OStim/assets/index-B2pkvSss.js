@@ -7621,7 +7621,7 @@
     }),
     setFocusBlock: (block) => set(() => ({ focusBlock: block })),
     handleControlInput: (control) => {
-      var _a, _b;
+      var _a, _b, _c, _d, _e;
       const lowerCaseControl = control.toLowerCase();
       const state = get();
       const { activeMenu, focusBlock } = state;
@@ -7631,8 +7631,16 @@
         else if (lowerCaseControl === "down") state.moveControlButtonsFocus(-1);
         else if (lowerCaseControl === "yes") state.updateActiveMenu(((_a = state.controlButtons.buttons[state.controlButtons.activeIndex]) == null ? void 0 : _a.id) || "navigation");
         else if (lowerCaseControl === "right") state.setFocusBlock("menu");
-        else if (lowerCaseControl === "esc" && (activeMenu === "alignMenu" || activeMenu === "searchMenu")) {
-          state.updateActiveMenu("navigation");
+        else if (lowerCaseControl === "esc" || lowerCaseControl === "no") {
+          if (activeMenu !== "navigation") {
+            state.updateActiveMenu("navigation");
+          } else if (lowerCaseControl === "esc") {
+            (_b = window.sendAction) == null ? void 0 : _b.call(window, JSON.stringify({
+              action: "focus",
+              payload: { shouldFocus: false }
+            }));
+            state.setFocusBlock("menu");
+          }
         }
       } else {
         if (activeMenu === "alignMenu") {
@@ -7647,11 +7655,12 @@
           else if (lowerCaseControl === "down") state.moveAlignmentField(1);
           else if (isCloseButton) {
             if (lowerCaseControl === "yes" || lowerCaseControl === "enter") {
+              state.updateActiveMenu("navigation");
               state.setFocusBlock("buttons");
               state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex((b) => b.id === "alignMenu"));
             }
           } else if (lowerCaseControl === "left" || lowerCaseControl === "right") {
-            const field = ((_b = alignmentFields[activeFieldIdx]) == null ? void 0 : _b.key) ?? "actor";
+            const field = ((_c = alignmentFields[activeFieldIdx]) == null ? void 0 : _c.key) ?? "actor";
             const direction = lowerCaseControl === "right" ? 1 : -1;
             if (field === "actor") {
               const count = state.alignment.actorCount > 0 ? state.alignment.actorCount : 1;
@@ -7668,8 +7677,9 @@
               const nextValue = base + delta;
               state.updateAlignmentField({ index: state.alignment.activeField, value: nextValue, type: "alignmentData" });
             }
-          } else if (lowerCaseControl === "esc" || lowerCaseControl === "tab") {
+          } else if (lowerCaseControl === "esc" || lowerCaseControl === "tab" || lowerCaseControl === "no") {
             console.log("Closing alignment menu with control input:", control);
+            state.updateActiveMenu("navigation");
             state.setFocusBlock("buttons");
             state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex((b) => b.id === "alignMenu"));
           }
@@ -7682,11 +7692,22 @@
           if (lowerCaseControl === "up") {
             state.moveSearchFocus(-1);
           } else if (lowerCaseControl === "down") state.moveSearchFocus(1);
-          else if (lowerCaseControl === "left" || lowerCaseControl === "esc" || lowerCaseControl === "tab") {
+          else if (lowerCaseControl === "left") {
+            state.setFocusBlock("buttons");
+            state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex((b) => b.id === "searchMenu"));
+          } else if (lowerCaseControl === "esc" || lowerCaseControl === "tab" || lowerCaseControl === "no") {
+            state.updateActiveMenu("navigation");
             state.setFocusBlock("buttons");
             state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex((b) => b.id === "searchMenu"));
           } else if (lowerCaseControl === "yes") state.selectSearchResult();
         } else if (activeMenu === "navigation") {
+          if (lowerCaseControl === "esc") {
+            (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({
+              action: "focus",
+              payload: { shouldFocus: false }
+            }));
+            return;
+          }
           if (state.settings.enableGridMenu) {
             if (lowerCaseControl === "up" || lowerCaseControl === "down" || lowerCaseControl === "right") {
               state.moveNavigationGridFocus(lowerCaseControl);
@@ -7707,6 +7728,13 @@
             else if (lowerCaseControl === "yes") state.selectNavigationOption();
           }
         } else if (activeMenu === "utilityOptions") {
+          if (lowerCaseControl === "esc" || lowerCaseControl === "no") {
+            (_e = window.sendAction) == null ? void 0 : _e.call(window, JSON.stringify({
+              action: "selectOption",
+              payload: { index: -1 }
+            }));
+            return;
+          }
           if (state.settings.enableGridMenu) {
             if (lowerCaseControl === "up" || lowerCaseControl === "down" || lowerCaseControl === "right") {
               state.moveUtilityOptionsGridFocus(lowerCaseControl);
@@ -9540,32 +9568,58 @@
       )
     ] });
   };
+  const gamepadControlToSkseKeyCode = {
+    dpadUp: 266,
+    dpadDown: 267,
+    dpadLeft: 268,
+    dpadRight: 269,
+    start: 270,
+    back: 271,
+    leftThumb: 272,
+    rightThumb: 273,
+    leftShoulder: 274,
+    rightShoulder: 275,
+    south: 276,
+    east: 277,
+    west: 278,
+    north: 279,
+    leftTrigger: 280,
+    rightTrigger: 281
+  };
+  const pressOnlyControls = /* @__PURE__ */ new Set(["yes", "esc", "toggle", "no", "tab"]);
   const useControls = () => {
     reactExports.useEffect(() => {
-      const mapKeyCodeToControl = (keyCode) => {
+      var _a, _b;
+      const mapKeyCodeToControl = (keyCode, isSearchInput = false) => {
         const { keys } = useOStimStore.getState();
         if (keyCode === keys.keyUp) return "up";
         if (keyCode === keys.keyDown) return "down";
-        if (keyCode === keys.keyLeft) return "left";
-        if (keyCode === keys.keyRight) return "right";
+        if (keyCode === keys.keyLeft && (!isSearchInput || keyCode !== 37)) return "left";
+        if (keyCode === keys.keyRight && (!isSearchInput || keyCode !== 39)) return "right";
         if (keyCode === keys.keyYes) return "yes";
         if (keyCode === keys.keyToggle) return "toggle";
-        if (keyCode === keys.keyEnd) return "no";
+        if (keyCode === keys.keyEnd || keyCode === keys.keyPullOut) return "no";
         if (keyCode === 27) return "esc";
         if (keyCode === 9) return "tab";
+        if (keyCode === 38) return "up";
+        if (keyCode === 40) return "down";
+        if (keyCode === 13) return "yes";
+        if (!isSearchInput && keyCode === 37) return "left";
+        if (!isSearchInput && keyCode === 39) return "right";
         return null;
       };
       const handleKeyDown = (e) => {
-        var _a, _b, _c, _d, _e, _f;
+        var _a2, _b2, _c, _d, _e, _f;
         if (document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("block-scale-input")) {
           return;
         }
         const keyCode = getNormalizedKeyCode(e);
-        const { keys } = useOStimStore.getState();
+        const { keys, activeMenu } = useOStimStore.getState();
+        const isSearchInput = document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("search-input");
         if (!e.repeat) {
-          if ((_a = keys.toggleFocusKeys) == null ? void 0 : _a.includes(keyCode)) {
+          if ((_a2 = keys.toggleFocusKeys) == null ? void 0 : _a2.includes(keyCode)) {
             e.preventDefault();
-            (_b = window.sendAction) == null ? void 0 : _b.call(window, JSON.stringify({ action: "toggleFocus" }));
+            (_b2 = window.sendAction) == null ? void 0 : _b2.call(window, JSON.stringify({ action: "toggleFocus" }));
             return;
           }
           if ((_c = keys.toggleInspectorKeys) == null ? void 0 : _c.includes(keyCode)) {
@@ -9578,10 +9632,22 @@
             (_e = window.sendAction) == null ? void 0 : _e.call(window, JSON.stringify({ action: "toggleHideUI" }));
             return;
           }
+          if (!isSearchInput) {
+            if (keyCode === keys.keySearch) {
+              e.preventDefault();
+              window.showMenu("searchMenu");
+              return;
+            }
+            if (keyCode === keys.keyAlignment) {
+              e.preventDefault();
+              window.showMenu("alignMenu");
+              return;
+            }
+          }
         }
-        const controlStr = mapKeyCodeToControl(keyCode);
+        const controlStr = mapKeyCodeToControl(keyCode, isSearchInput);
         if (controlStr) {
-          if (keyCode === 27 || keyCode === 9) {
+          if (keyCode === 27 || keyCode === 9 || activeMenu === "alignMenu" && (controlStr === "up" || controlStr === "down")) {
             e.preventDefault();
           }
           if (!e.repeat) {
@@ -9590,11 +9656,12 @@
         }
       };
       const handleKeyUp = (e) => {
-        var _a;
+        var _a2;
         const keyCode = getNormalizedKeyCode(e);
-        const controlStr = mapKeyCodeToControl(keyCode);
+        const isSearchInput = document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("search-input");
+        const controlStr = mapKeyCodeToControl(keyCode, isSearchInput);
         if (controlStr) {
-          (_a = window.handleControlEnd) == null ? void 0 : _a.call(window);
+          (_a2 = window.handleControlEnd) == null ? void 0 : _a2.call(window);
         }
       };
       const handleWheel = (e) => {
@@ -9606,10 +9673,102 @@
           window.handleControl(e.deltaY > 0 ? "up" : "down");
         }
       };
+      let rightStickScrollAcc = 0;
+      const disposeGamepad = (_b = (_a = window.magelight) == null ? void 0 : _a.gamepad) == null ? void 0 : _b.onAction((ev) => {
+        var _a2, _b2, _c, _d, _e, _f, _g;
+        if (ev.phase === "cancel") {
+          rightStickScrollAcc = 0;
+          (_a2 = window.handleControlEnd) == null ? void 0 : _a2.call(window);
+          return true;
+        }
+        if (ev.phase === "release") {
+          (_b2 = window.handleControlEnd) == null ? void 0 : _b2.call(window);
+          return true;
+        }
+        if (ev.control === "rightStick" && ev.phase === "change") {
+          if (Math.abs(ev.y) < 0.25) {
+            rightStickScrollAcc = 0;
+            return true;
+          }
+          rightStickScrollAcc += ev.y * (ev.dt || 0.016) * 10;
+          while (Math.abs(rightStickScrollAcc) >= 1) {
+            const step = rightStickScrollAcc > 0 ? 1 : -1;
+            rightStickScrollAcc -= step;
+            const { focusBlock, activeMenu, settings } = useOStimStore.getState();
+            if (focusBlock === "menu" && (activeMenu === "navigation" || activeMenu === "utilityOptions") && settings.enableGridMenu) {
+              window.handleControl(step > 0 ? "wheelup" : "wheeldown");
+            } else {
+              window.handleControl(step > 0 ? "up" : "down");
+            }
+          }
+          return true;
+        }
+        if (ev.phase === "press" || ev.phase === "repeat") {
+          const skseCode = gamepadControlToSkseKeyCode[ev.control] ?? 0;
+          const { keys } = useOStimStore.getState();
+          if (ev.phase === "press" && skseCode) {
+            if ((_c = keys.toggleFocusKeys) == null ? void 0 : _c.includes(skseCode)) {
+              (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({ action: "toggleFocus" }));
+              return true;
+            }
+            if ((_e = keys.toggleInspectorKeys) == null ? void 0 : _e.includes(skseCode)) {
+              (_f = window.sendAction) == null ? void 0 : _f.call(window, JSON.stringify({ action: "toggleInspector" }));
+              return true;
+            }
+            if (skseCode === keys.keyHideUI) {
+              (_g = window.sendAction) == null ? void 0 : _g.call(window, JSON.stringify({ action: "toggleHideUI" }));
+              return true;
+            }
+            if (skseCode === keys.keySearch) {
+              window.showMenu("searchMenu");
+              return true;
+            }
+            if (skseCode === keys.keyAlignment) {
+              window.showMenu("alignMenu");
+              return true;
+            }
+          }
+          let controlStr = null;
+          switch (ev.action) {
+            case "up":
+              controlStr = "up";
+              break;
+            case "down":
+              controlStr = "down";
+              break;
+            case "left":
+              controlStr = "left";
+              break;
+            case "right":
+              controlStr = "right";
+              break;
+            case "accept":
+              controlStr = "yes";
+              break;
+            case "cancel":
+              controlStr = "esc";
+              break;
+            case "secondary":
+              controlStr = "toggle";
+              break;
+          }
+          if (controlStr === null && skseCode) {
+            controlStr = mapKeyCodeToControl(skseCode, false);
+          }
+          if (controlStr) {
+            if (ev.phase === "press" || !pressOnlyControls.has(controlStr)) {
+              window.handleControl(controlStr);
+            }
+            return true;
+          }
+        }
+        return false;
+      });
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
       window.addEventListener("wheel", handleWheel, { passive: false });
       return () => {
+        disposeGamepad == null ? void 0 : disposeGamepad();
         window.removeEventListener("keydown", handleKeyDown);
         window.removeEventListener("keyup", handleKeyUp);
         window.removeEventListener("wheel", handleWheel);

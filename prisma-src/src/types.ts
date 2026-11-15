@@ -95,6 +95,16 @@ export interface Keys {
   toggleInspectorKeys?: number[];
 }
 
+export interface MagelightGamepadEvent {
+    control: string;
+    action: string;
+    phase: 'press' | 'release' | 'repeat' | 'change' | 'cancel';
+    value: number;
+    x: number;
+    y: number;
+    dt: number;
+}
+
 declare global {
     interface Window {
         /** Called by Skyrim to update the navigation scene options. */
@@ -128,5 +138,10 @@ declare global {
         sendAction?: (data: string) => void;
         showMenu(menu: ActiveMenu): void;
         setGameReady?: () => void;
+        magelight?: {
+            gamepad?: {
+                onAction(handler: (ev: MagelightGamepadEvent) => boolean | void): () => void;
+            };
+        };
     }
 }

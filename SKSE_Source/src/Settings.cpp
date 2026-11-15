@@ -88,6 +88,9 @@ void Settings::Load() {
             "MagicMenu",
             "MapMenu",
             "FavoritesMenu",
+            "TweenMenu",
+            "StatsMenu",
+            "LevelUp Menu",
             "Dialogue Menu",
             "Sleep/Wait Menu",
             "Lockpicking Menu",
@@ -96,6 +99,7 @@ void Settings::Load() {
             "Book Menu",
             "Crafting Menu",
             "RaceSex Menu",
+            "MessageBoxMenu",
             "Console",
         };
     }

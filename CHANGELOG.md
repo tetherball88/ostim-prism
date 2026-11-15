@@ -12,6 +12,7 @@
 - **Controller & Mouse Hotkeys in `OStimPrism.ini`** — Fixed `ToggleFocus` and `ToggleInspector` ignoring controller and mouse button codes (such as setting `ToggleFocus = 279` for the controller Y button).
 - **Exiting Menus & Focus Mode Cleanly** — Fixed getting stuck in Focus Mode or inside the Search and Alignment menus; pressing **B** on a controller or **Esc** on a keyboard now cleanly backs out of submenus and exits Focus Mode, and the Alignment menu's **Close** button now properly closes the menu.
 - **HUD Auto-Hide Wakeup** — Using OStim's Pull Out, Auto-Mode, or FreeCam controls now counts as activity so the HUD wakes back up and resets its idle timer.
+- **Tween Menu (`Tab`), Skills, Level-Up & MessageBox Menus** — Added `TweenMenu`, `StatsMenu`, `LevelUp Menu`, and `MessageBoxMenu` to `TrackedMenus` so OStim Prism cleanly hides while they are open instead of overlapping and blocking input.
 
 ---
 

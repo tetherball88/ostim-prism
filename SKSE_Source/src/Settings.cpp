@@ -22,7 +22,12 @@ void Settings::Load() {
         std::stringstream ss(valStr);
         std::string item;
         while (std::getline(ss, item, ',')) {
-            try { out.push_back(std::stoi(item)); } catch (...) {}
+            try {
+                int val = std::stoi(item);
+                if (val > 0) {
+                    out.push_back(static_cast<uint32_t>(val));
+                }
+            } catch (...) {}
         }
     };
 

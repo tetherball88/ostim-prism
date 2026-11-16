@@ -22,6 +22,14 @@ export const scanCodeToJS: Record<number, number> = {
     203: 37, // Left Arrow
     205: 39, // Right Arrow
 
+    // Navigation Cluster
+    199: 36, // Home
+    201: 33, // Page Up
+    207: 35, // End
+    209: 34, // Page Down
+    210: 45, // Insert
+    211: 46, // Delete
+
     // Common Control Keys
     28: 13,  // Enter
     1: 27,   // Esc
@@ -34,6 +42,20 @@ export const scanCodeToJS: Record<number, number> = {
     56: 18,  // Left Alt
     184: 18, // Right Alt
     14: 8,   // Backspace
+    58: 20,  // Caps Lock
+
+    // Punctuation
+    12: 189, // - / _
+    13: 187, // = / +
+    26: 219, // [ / {
+    27: 221, // ] / }
+    39: 186, // ; / :
+    40: 222, // ' / "
+    41: 192, // ` / ~
+    43: 220, // \ / |
+    51: 188, // , / <
+    52: 190, // . / >
+    53: 191, // / / ?
 
     // Alphanumeric
     16: 81, // Q
@@ -97,5 +119,6 @@ export const scanCodeToJS: Record<number, number> = {
 };
 
 export const convertScanCodeToJS = (scanCode: number): number => {
+    if (scanCode >= 256) return scanCode;
     return scanCodeToJS[scanCode] || scanCode;
 };

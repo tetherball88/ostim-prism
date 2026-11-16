@@ -7634,7 +7634,7 @@
         else if (lowerCaseControl === "esc" || lowerCaseControl === "no") {
           if (activeMenu !== "navigation") {
             state.updateActiveMenu("navigation");
-          } else if (lowerCaseControl === "esc") {
+          } else {
             (_b = window.sendAction) == null ? void 0 : _b.call(window, JSON.stringify({
               action: "focus",
               payload: { shouldFocus: false }
@@ -7701,7 +7701,7 @@
             state.setButtonsActiveIndex(state.controlButtons.buttons.findIndex((b) => b.id === "searchMenu"));
           } else if (lowerCaseControl === "yes") state.selectSearchResult();
         } else if (activeMenu === "navigation") {
-          if (lowerCaseControl === "esc") {
+          if (lowerCaseControl === "esc" || lowerCaseControl === "no") {
             (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({
               action: "focus",
               payload: { shouldFocus: false }
@@ -9591,59 +9591,80 @@
     reactExports.useEffect(() => {
       var _a, _b;
       const mapKeyCodeToControl = (keyCode, isSearchInput = false) => {
-        const { keys } = useOStimStore.getState();
-        if (keyCode === keys.keyUp) return "up";
-        if (keyCode === keys.keyDown) return "down";
-        if (keyCode === keys.keyLeft && (!isSearchInput || keyCode !== 37)) return "left";
-        if (keyCode === keys.keyRight && (!isSearchInput || keyCode !== 39)) return "right";
-        if (keyCode === keys.keyYes) return "yes";
-        if (keyCode === keys.keyToggle) return "toggle";
-        if (keyCode === keys.keyEnd || keyCode === keys.keyPullOut) return "no";
         if (keyCode === 27) return "esc";
         if (keyCode === 9) return "tab";
         if (keyCode === 38) return "up";
         if (keyCode === 40) return "down";
         if (keyCode === 13) return "yes";
-        if (!isSearchInput && keyCode === 37) return "left";
-        if (!isSearchInput && keyCode === 39) return "right";
+        if (isSearchInput) return null;
+        const { keys } = useOStimStore.getState();
+        if (keyCode === keys.keyUp) return "up";
+        if (keyCode === keys.keyDown) return "down";
+        if (keyCode === keys.keyLeft) return "left";
+        if (keyCode === keys.keyRight) return "right";
+        if (keyCode === keys.keyYes) return "yes";
+        if (keyCode === keys.keyToggle) return "toggle";
+        if (keyCode === keys.keyPullOut) return "no";
+        if (keyCode === 37) return "left";
+        if (keyCode === 39) return "right";
         return null;
       };
+      const dispatchHotkeyAction = (code, allowMenuAndSceneHotkeys) => {
+        var _a2, _b2, _c, _d, _e, _f, _g, _h, _i;
+        if (code <= 0) return false;
+        const { keys } = useOStimStore.getState();
+        if ((_a2 = keys.toggleFocusKeys) == null ? void 0 : _a2.includes(code)) {
+          (_b2 = window.sendAction) == null ? void 0 : _b2.call(window, JSON.stringify({ action: "toggleFocus" }));
+          return true;
+        }
+        if ((_c = keys.toggleInspectorKeys) == null ? void 0 : _c.includes(code)) {
+          (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({ action: "toggleInspector" }));
+          return true;
+        }
+        if (code === keys.keyHideUI) {
+          (_e = window.sendAction) == null ? void 0 : _e.call(window, JSON.stringify({ action: "toggleHideUI" }));
+          return true;
+        }
+        if (!allowMenuAndSceneHotkeys) {
+          return false;
+        }
+        if (code === keys.keySearch) {
+          window.showMenu("searchMenu");
+          return true;
+        }
+        if (code === keys.keyAlignment) {
+          window.showMenu("alignMenu");
+          return true;
+        }
+        if (code === keys.keyEnd) {
+          (_f = window.sendAction) == null ? void 0 : _f.call(window, JSON.stringify({ action: "endScene" }));
+          return true;
+        }
+        if (code === keys.keySpeedUp) {
+          (_g = window.sendAction) == null ? void 0 : _g.call(window, JSON.stringify({ action: "adjustSpeed", payload: { delta: 1 } }));
+          return true;
+        }
+        if (code === keys.keySpeedDown) {
+          (_h = window.sendAction) == null ? void 0 : _h.call(window, JSON.stringify({ action: "adjustSpeed", payload: { delta: -1 } }));
+          return true;
+        }
+        if (code === keys.keyAutoMode) {
+          (_i = window.sendAction) == null ? void 0 : _i.call(window, JSON.stringify({ action: "toggleAutoMode" }));
+          return true;
+        }
+        return false;
+      };
       const handleKeyDown = (e) => {
-        var _a2, _b2, _c, _d, _e, _f;
+        var _a2;
         if (document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("block-scale-input")) {
           return;
         }
         const keyCode = getNormalizedKeyCode(e);
-        const { keys, activeMenu } = useOStimStore.getState();
+        const { activeMenu } = useOStimStore.getState();
         const isSearchInput = document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("search-input");
-        if (!e.repeat) {
-          if ((_a2 = keys.toggleFocusKeys) == null ? void 0 : _a2.includes(keyCode)) {
-            e.preventDefault();
-            (_b2 = window.sendAction) == null ? void 0 : _b2.call(window, JSON.stringify({ action: "toggleFocus" }));
-            return;
-          }
-          if ((_c = keys.toggleInspectorKeys) == null ? void 0 : _c.includes(keyCode)) {
-            e.preventDefault();
-            (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({ action: "toggleInspector" }));
-            return;
-          }
-          if (keyCode === keys.keyHideUI) {
-            e.preventDefault();
-            (_e = window.sendAction) == null ? void 0 : _e.call(window, JSON.stringify({ action: "toggleHideUI" }));
-            return;
-          }
-          if (!isSearchInput) {
-            if (keyCode === keys.keySearch) {
-              e.preventDefault();
-              window.showMenu("searchMenu");
-              return;
-            }
-            if (keyCode === keys.keyAlignment) {
-              e.preventDefault();
-              window.showMenu("alignMenu");
-              return;
-            }
-          }
+        if (!e.repeat && dispatchHotkeyAction(keyCode, !isSearchInput)) {
+          e.preventDefault();
+          return;
         }
         const controlStr = mapKeyCodeToControl(keyCode, isSearchInput);
         if (controlStr) {
@@ -9651,7 +9672,7 @@
             e.preventDefault();
           }
           if (!e.repeat) {
-            (_f = window.handleControlStart) == null ? void 0 : _f.call(window, controlStr);
+            (_a2 = window.handleControlStart) == null ? void 0 : _a2.call(window, controlStr);
           }
         }
       };
@@ -9675,7 +9696,7 @@
       };
       let rightStickScrollAcc = 0;
       const disposeGamepad = (_b = (_a = window.magelight) == null ? void 0 : _a.gamepad) == null ? void 0 : _b.onAction((ev) => {
-        var _a2, _b2, _c, _d, _e, _f, _g;
+        var _a2, _b2;
         if (ev.phase === "cancel") {
           rightStickScrollAcc = 0;
           (_a2 = window.handleControlEnd) == null ? void 0 : _a2.call(window);
@@ -9705,28 +9726,8 @@
         }
         if (ev.phase === "press" || ev.phase === "repeat") {
           const skseCode = gamepadControlToSkseKeyCode[ev.control] ?? 0;
-          const { keys } = useOStimStore.getState();
-          if (ev.phase === "press" && skseCode) {
-            if ((_c = keys.toggleFocusKeys) == null ? void 0 : _c.includes(skseCode)) {
-              (_d = window.sendAction) == null ? void 0 : _d.call(window, JSON.stringify({ action: "toggleFocus" }));
-              return true;
-            }
-            if ((_e = keys.toggleInspectorKeys) == null ? void 0 : _e.includes(skseCode)) {
-              (_f = window.sendAction) == null ? void 0 : _f.call(window, JSON.stringify({ action: "toggleInspector" }));
-              return true;
-            }
-            if (skseCode === keys.keyHideUI) {
-              (_g = window.sendAction) == null ? void 0 : _g.call(window, JSON.stringify({ action: "toggleHideUI" }));
-              return true;
-            }
-            if (skseCode === keys.keySearch) {
-              window.showMenu("searchMenu");
-              return true;
-            }
-            if (skseCode === keys.keyAlignment) {
-              window.showMenu("alignMenu");
-              return true;
-            }
+          if (ev.phase === "press" && skseCode && dispatchHotkeyAction(skseCode, true)) {
+            return true;
           }
           let controlStr = null;
           switch (ev.action) {
@@ -9945,6 +9946,19 @@
     // Left Arrow
     205: 39,
     // Right Arrow
+    // Navigation Cluster
+    199: 36,
+    // Home
+    201: 33,
+    // Page Up
+    207: 35,
+    // End
+    209: 34,
+    // Page Down
+    210: 45,
+    // Insert
+    211: 46,
+    // Delete
     // Common Control Keys
     28: 13,
     // Enter
@@ -9968,6 +9982,31 @@
     // Right Alt
     14: 8,
     // Backspace
+    58: 20,
+    // Caps Lock
+    // Punctuation
+    12: 189,
+    // - / _
+    13: 187,
+    // = / +
+    26: 219,
+    // [ / {
+    27: 221,
+    // ] / }
+    39: 186,
+    // ; / :
+    40: 222,
+    // ' / "
+    41: 192,
+    // ` / ~
+    43: 220,
+    // \ / |
+    51: 188,
+    // , / <
+    52: 190,
+    // . / >
+    53: 191,
+    // / / ?
     // Alphanumeric
     16: 81,
     // Q
@@ -10078,6 +10117,7 @@
     // Numpad Add (+)
   };
   const convertScanCodeToJS = (scanCode) => {
+    if (scanCode >= 256) return scanCode;
     return scanCodeToJS[scanCode] || scanCode;
   };
   function setupGameIntegration(store2) {

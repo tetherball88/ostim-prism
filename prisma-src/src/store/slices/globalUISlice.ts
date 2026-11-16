@@ -116,7 +116,7 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
             else if (lowerCaseControl === 'esc' || lowerCaseControl === 'no') {
                 if (activeMenu !== 'navigation') {
                     state.updateActiveMenu('navigation');
-                } else if (lowerCaseControl === 'esc') {
+                } else {
                     window.sendAction?.(JSON.stringify({
                         action: 'focus',
                         payload: { shouldFocus: false }
@@ -188,7 +188,7 @@ export const createGlobalUISlice: StoreSlice<import('../types').GlobalUISlice> =
                 }
                 else if (lowerCaseControl === 'yes') state.selectSearchResult();
             } else if (activeMenu === 'navigation') {
-                if (lowerCaseControl === 'esc') {
+                if (lowerCaseControl === 'esc' || lowerCaseControl === 'no') {
                     window.sendAction?.(JSON.stringify({
                         action: 'focus',
                         payload: { shouldFocus: false }

@@ -141,6 +141,15 @@ public:
     // Set animation speed
     bool SetSpeed(uint32_t threadID, int32_t speed);
 
+    // Adjust animation speed by delta (+1 / -1)
+    bool AdjustSpeed(uint32_t threadID, int32_t delta);
+
+    // Stop an active OStim thread (equivalent to OThread.Stop / keyEnd)
+    void StopThread(uint32_t threadID);
+
+    // Toggle OStim auto mode on/off (equivalent to keyAutoMode)
+    void ToggleAutoMode(uint32_t threadID);
+
     // Set additional progress for an actor (exposed to Papyrus)
     void SetActorAdditionalProgress(RE::FormID actorID, float progress);
 

@@ -1,8 +1,10 @@
 #include "PrismaUIManager.h"
 #include "PortraitManager.h"
 #include "Settings.h"
+#include "REX/W32/XINPUT.h"
 #include <thread>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <Windows.h>
 #include <algorithm>
@@ -12,6 +14,130 @@ namespace {
     int64_t SteadyNowMs() {
         auto now = std::chrono::steady_clock::now().time_since_epoch();
         return std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    }
+
+    bool IsGameWindowForeground() {
+        HWND fg = GetForegroundWindow();
+        if (!fg) {
+            return false;
+        }
+        DWORD pid = 0;
+        GetWindowThreadProcessId(fg, &pid);
+        return pid == GetCurrentProcessId();
+    }
+
+    int DxScanCodeToVirtualKey(uint32_t code) {
+        if (code >= 257 && code <= 260) {
+            switch (code) {
+                case 257: return VK_RBUTTON;
+                case 258: return VK_MBUTTON;
+                case 259: return VK_XBUTTON1;
+                case 260: return VK_XBUTTON2;
+                default:  return 0;
+            }
+        }
+        if (code == 0 || code >= 256) {
+            return 0;
+        }
+        switch (code) {
+            case 42:  return VK_LSHIFT;
+            case 54:  return VK_RSHIFT;
+            case 29:  return VK_LCONTROL;
+            case 157: return VK_RCONTROL;
+            case 56:  return VK_LMENU;
+            case 184: return VK_RMENU;
+            case 156: return VK_RETURN;
+            case 181: return VK_DIVIDE;
+            case 197: return VK_PAUSE;
+            case 199: return VK_HOME;
+            case 200: return VK_UP;
+            case 201: return VK_PRIOR;
+            case 203: return VK_LEFT;
+            case 205: return VK_RIGHT;
+            case 207: return VK_END;
+            case 208: return VK_DOWN;
+            case 209: return VK_NEXT;
+            case 210: return VK_INSERT;
+            case 211: return VK_DELETE;
+            default: {
+                const UINT mapped = (code < 128)
+                    ? MapVirtualKeyW(code, MAPVK_VSC_TO_VK_EX)
+                    : MapVirtualKeyW(0xE000u | (code & 0x7Fu), MAPVK_VSC_TO_VK_EX);
+                return static_cast<int>(mapped);
+            }
+        }
+    }
+
+    bool QueryXInputState(DWORD slot, REX::W32::XINPUT_STATE& outState) {
+        using XInputGetStateFn = DWORD(WINAPI*)(DWORD, REX::W32::XINPUT_STATE*);
+        static XInputGetStateFn s_fn = []() -> XInputGetStateFn {
+            static constexpr const wchar_t* kDlls[] = {
+                L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll"
+            };
+            for (const wchar_t* dll : kDlls) {
+                HMODULE mod = GetModuleHandleW(dll);
+                if (!mod) {
+                    mod = LoadLibraryW(dll);
+                }
+                if (mod) {
+                    auto fn = reinterpret_cast<XInputGetStateFn>(GetProcAddress(mod, "XInputGetState"));
+                    if (fn) {
+                        return fn;
+                    }
+                }
+            }
+            return nullptr;
+        }();
+        if (!s_fn) {
+            return false;
+        }
+        return s_fn(slot, &outState) == ERROR_SUCCESS;
+    }
+
+    uint32_t BuildXInputMask(const REX::W32::XINPUT_GAMEPAD& pad) {
+        static constexpr uint16_t kDigitalMasks[14] = {
+            0x0001, 0x0002, 0x0004, 0x0008,
+            0x0010, 0x0020, 0x0040, 0x0080,
+            0x0100, 0x0200,
+            0x1000, 0x2000, 0x4000, 0x8000
+        };
+        uint32_t mask = 0;
+        for (uint32_t i = 0; i < 14; ++i) {
+            if ((pad.buttons & kDigitalMasks[i]) != 0) {
+                mask |= (1u << i);
+            }
+        }
+        if (pad.leftTrigger > REX::W32::XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
+            mask |= (1u << 14);
+        }
+        if (pad.rightTrigger > REX::W32::XINPUT_GAMEPAD_TRIGGER_THRESHOLD) {
+            mask |= (1u << 15);
+        }
+        return mask;
+    }
+
+    bool TryConsumeDebounce(std::atomic<int64_t>& lastMs, int64_t windowMs = 200) {
+        const int64_t now = SteadyNowMs();
+        const int64_t prev = lastMs.load(std::memory_order_relaxed);
+        if (prev > 0 && (now - prev) < windowMs) {
+            return false;
+        }
+        lastMs.store(now, std::memory_order_relaxed);
+        return true;
+    }
+
+    const char* DirectionalScriptForCode(int dirCode) {
+        switch (dirCode) {
+            case 266: return "handleControl('up')";
+            case 267: return "handleControl('down')";
+            case 268: return "handleControl('left')";
+            case 269: return "handleControl('right')";
+            default:  return nullptr;
+        }
+    }
+
+    bool ContainsKeyCode(const std::vector<uint32_t>& keys, uint32_t code) {
+        return std::find(keys.begin(), keys.end(), code) != keys.end();
     }
 
     uint32_t GamepadMaskToKeyCode(uint32_t mask) {
@@ -104,6 +230,280 @@ void PrismaUIManager::ToggleInspector() {
         magelight->IsInspectorVisible(view, &visible);
         magelight->ShowInspector(view, !visible);
     }
+}
+
+void PrismaUIManager::ToggleFocusDebounced() {
+    if (!TryConsumeDebounce(lastFocusToggleMs)) {
+        return;
+    }
+    SetFocus(!HasFocus());
+}
+
+void PrismaUIManager::ToggleInspectorDebounced() {
+    if (!TryConsumeDebounce(lastInspectorToggleMs)) {
+        return;
+    }
+    ToggleInspector();
+}
+
+bool PrismaUIManager::IsMagelightCapturingGamepad() const {
+    if (!IsViewValid()) {
+        return false;
+    }
+    if (magelight->hostVersionNumber >= 10600 && magelight->QueryCapability("gamepad") == 1) {
+        MAGELIGHT_API::GamepadState state{};
+        state.size = sizeof(state);
+        if (magelight->GetViewGamepadState(view, &state) == MAGELIGHT_API::Result::Ok) {
+            return state.capturing;
+        }
+    }
+    return false;
+}
+
+void PrismaUIManager::ResetFocusedInputState() {
+    wasFocusedLastPoll = false;
+    prevPolledKeyDown.clear();
+    prevXInputMask = 0xFFFFFFFFu;
+    xinputRepeatDir = 0;
+    xinputNextRepeatMs = 0;
+    xinputRightStickAcc = 0.0f;
+}
+
+void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
+    if (!IsViewValid() || currentThreadID == INVALID_THREAD_ID || openMenuCount > 0 || hiddenByMenu || !IsGameWindowForeground()) {
+        ResetFocusedInputState();
+        return;
+    }
+
+    const bool focused = HasFocus() || hasKeyFocus.load();
+    const bool firstFocusedTick = focused && !wasFocusedLastPoll;
+    auto* settings = Settings::GetSingleton();
+
+    auto pollHotkeyList = [&](const std::vector<uint32_t>& keys, auto onTrigger) {
+        for (uint32_t code : keys) {
+            const int vk = DxScanCodeToVirtualKey(code);
+            if (vk <= 0) {
+                continue;
+            }
+            const bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+            if (!focused || firstFocusedTick) {
+                prevPolledKeyDown[code] = down;
+                continue;
+            }
+            const bool wasDown = prevPolledKeyDown[code];
+            prevPolledKeyDown[code] = down;
+            if (!hiddenByUser && down && !wasDown) {
+                ResetIdleTimer();
+                onTrigger();
+            }
+        }
+    };
+
+    pollHotkeyList(settings->toggleFocusKeys, [this]() { ToggleFocusDebounced(); });
+    pollHotkeyList(settings->toggleInspectorKeys, [this]() { ToggleInspectorDebounced(); });
+
+    if (!focused || IsMagelightCapturingGamepad()) {
+        prevXInputMask = 0xFFFFFFFFu;
+        xinputRepeatDir = 0;
+        xinputNextRepeatMs = 0;
+        xinputRightStickAcc = 0.0f;
+        wasFocusedLastPoll = focused;
+        return;
+    }
+
+    REX::W32::XINPUT_STATE xstate{};
+    bool gotPad = false;
+    if (activeXInputSlot >= 0) {
+        gotPad = QueryXInputState(static_cast<DWORD>(activeXInputSlot), xstate);
+        if (!gotPad) {
+            activeXInputSlot = -1;
+        }
+    }
+    if (!gotPad && (nowMs - lastXInputProbeMs >= 1000)) {
+        lastXInputProbeMs = nowMs;
+        for (int slot = 0; slot < 4; ++slot) {
+            if (QueryXInputState(static_cast<DWORD>(slot), xstate)) {
+                activeXInputSlot = slot;
+                gotPad = true;
+                break;
+            }
+        }
+    }
+    if (!gotPad) {
+        prevXInputMask = 0xFFFFFFFFu;
+        xinputRepeatDir = 0;
+        xinputNextRepeatMs = 0;
+        xinputRightStickAcc = 0.0f;
+        wasFocusedLastPoll = focused;
+        return;
+    }
+
+    const uint32_t mask = BuildXInputMask(xstate.gamepad);
+    if (firstFocusedTick || prevXInputMask == 0xFFFFFFFFu) {
+        prevXInputMask = mask;
+        xinputRepeatDir = 0;
+        xinputNextRepeatMs = 0;
+        xinputRightStickAcc = 0.0f;
+        wasFocusedLastPoll = focused;
+        return;
+    }
+
+    const uint32_t pressedMask = mask & ~prevXInputMask;
+    prevXInputMask = mask;
+
+    if (pressedMask != 0) {
+        ResetIdleTimer();
+        auto* dp = OStimDataProvider::GetSingleton();
+        const bool isPlayerThread = (currentThreadID == 0);
+
+        for (uint32_t bit = 0; bit < 16; ++bit) {
+            if ((pressedMask & (1u << bit)) == 0) {
+                continue;
+            }
+            const uint32_t code = 266u + bit;
+
+            if (!hiddenByUser && ContainsKeyCode(settings->toggleFocusKeys, code)) {
+                ToggleFocusDebounced();
+                wasFocusedLastPoll = focused;
+                return;
+            }
+            if (!hiddenByUser && ContainsKeyCode(settings->toggleInspectorKeys, code)) {
+                ToggleInspectorDebounced();
+                continue;
+            }
+
+            bool handledCustom = false;
+            if (hasCachedKeys) {
+                if (code == static_cast<uint32_t>(cachedKeys.keyEnd)) {
+                    SetFocus(false);
+                    if (isPlayerThread) {
+                        dp->StopThread(0);
+                        SKSE::log::info("XInput fallback: endScene stopping player thread");
+                    }
+                    wasFocusedLastPoll = focused;
+                    return;
+                }
+                if (code == static_cast<uint32_t>(cachedKeys.keyHideUI)) {
+                    ToggleHideUI();
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keySearch)) {
+                    if (!hiddenByUser) {
+                        magelight->InvokeJS(view, "showMenu('searchMenu')");
+                    }
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keyAlignment)) {
+                    if (!hiddenByUser) {
+                        magelight->InvokeJS(view, "showMenu('alignMenu')");
+                    }
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keySpeedUp)) {
+                    if (isPlayerThread) {
+                        dp->AdjustSpeed(0, 1);
+                        UpdateThreadStatus();
+                    }
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keySpeedDown)) {
+                    if (isPlayerThread) {
+                        dp->AdjustSpeed(0, -1);
+                        UpdateThreadStatus();
+                    }
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keyAutoMode)) {
+                    if (isPlayerThread) {
+                        dp->ToggleAutoMode(0);
+                        UpdateThreadStatus();
+                    }
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keyYes)) {
+                    magelight->InvokeJS(view, "handleControl('yes')");
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keyToggle)) {
+                    magelight->InvokeJS(view, "handleControl('toggle')");
+                    handledCustom = true;
+                } else if (code == static_cast<uint32_t>(cachedKeys.keyPullOut)) {
+                    magelight->InvokeJS(view, "handleControl('no')");
+                    handledCustom = true;
+                }
+            }
+
+            if (!handledCustom) {
+                const bool isCustomDir = hasCachedKeys && (
+                    code == static_cast<uint32_t>(cachedKeys.keyUp) ||
+                    code == static_cast<uint32_t>(cachedKeys.keyDown) ||
+                    code == static_cast<uint32_t>(cachedKeys.keyLeft) ||
+                    code == static_cast<uint32_t>(cachedKeys.keyRight));
+                if (!isCustomDir) {
+                    if (code == 276) {
+                        magelight->InvokeJS(view, "handleControl('yes')");
+                    } else if (code == 277) {
+                        magelight->InvokeJS(view, "handleControl('esc')");
+                    } else if (code == 278) {
+                        magelight->InvokeJS(view, "handleControl('toggle')");
+                    }
+                }
+            }
+        }
+    }
+
+    auto isMaskPressed = [mask](uint32_t code) {
+        return code >= 266u && code <= 281u && (mask & (1u << (code - 266u))) != 0;
+    };
+
+    int dir = 0;
+    if (hasCachedKeys) {
+        if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyUp)))         dir = 266;
+        else if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyDown)))  dir = 267;
+        else if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyLeft)))  dir = 268;
+        else if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyRight))) dir = 269;
+    }
+    if (dir == 0) {
+        if (isMaskPressed(266))      dir = 266;
+        else if (isMaskPressed(267)) dir = 267;
+        else if (isMaskPressed(268)) dir = 268;
+        else if (isMaskPressed(269)) dir = 269;
+    }
+    if (dir == 0) {
+        const float lx = static_cast<float>(xstate.gamepad.thumbLX);
+        const float ly = static_cast<float>(xstate.gamepad.thumbLY);
+        if (std::hypot(lx, ly) >= static_cast<float>(REX::W32::XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)) {
+            const bool horizontal = std::fabs(lx) > std::fabs(ly) * 1.15f;
+            dir = horizontal ? (lx > 0.0f ? 269 : 268) : (ly > 0.0f ? 266 : 267);
+        }
+    }
+
+    if (dir == 0) {
+        xinputRepeatDir = 0;
+        xinputNextRepeatMs = 0;
+    } else if (dir != xinputRepeatDir) {
+        xinputRepeatDir = dir;
+        xinputNextRepeatMs = nowMs + 350;
+        ResetIdleTimer();
+        if (const char* js = DirectionalScriptForCode(dir)) {
+            magelight->InvokeJS(view, js);
+        }
+    } else if (nowMs >= xinputNextRepeatMs) {
+        xinputNextRepeatMs = nowMs + 90;
+        ResetIdleTimer();
+        if (const char* js = DirectionalScriptForCode(dir)) {
+            magelight->InvokeJS(view, js);
+        }
+    }
+
+    const float rawRy = static_cast<float>(xstate.gamepad.thumbRY);
+    if (std::fabs(rawRy) < static_cast<float>(REX::W32::XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE)) {
+        xinputRightStickAcc = 0.0f;
+    } else {
+        const float ry = std::clamp(rawRy / 32767.0f, -1.0f, 1.0f);
+        xinputRightStickAcc += ry * 0.025f * 10.0f;
+        while (std::fabs(xinputRightStickAcc) >= 1.0f) {
+            const int step = (xinputRightStickAcc > 0.0f) ? 1 : -1;
+            xinputRightStickAcc -= static_cast<float>(step);
+            ResetIdleTimer();
+            magelight->InvokeJS(view, step > 0 ? "handleControl('up')" : "handleControl('down')");
+        }
+    }
+
+    wasFocusedLastPoll = focused;
 }
 
 void PrismaUIManager::ToggleHideUI() {
@@ -280,21 +680,16 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
 
         // Toggle Focus (Configurable) — only when not manually hidden by user
         if (!hiddenByUser) {
-            auto& focusKeys = Settings::GetSingleton()->toggleFocusKeys;
-            if (std::find(focusKeys.begin(), focusKeys.end(), key) != focusKeys.end()) {
-                if (button->IsDown()) {
-                    ResetIdleTimer();
-                    SetFocus(!HasFocus());
-                }
+            auto* settings = Settings::GetSingleton();
+            if (ContainsKeyCode(settings->toggleFocusKeys, key) && button->IsDown()) {
+                ResetIdleTimer();
+                ToggleFocusDebounced();
             }
 
             // Toggle Inspector (Configurable)
-            auto& inspectorKeys = Settings::GetSingleton()->toggleInspectorKeys;
-            if (std::find(inspectorKeys.begin(), inspectorKeys.end(), key) != inspectorKeys.end()) {
-                if (button->IsDown()) {
-                    ResetIdleTimer();
-                    ToggleInspector();
-                }
+            if (ContainsKeyCode(settings->toggleInspectorKeys, key) && button->IsDown()) {
+                ResetIdleTimer();
+                ToggleInspectorDebounced();
             }
         }
 
@@ -482,6 +877,8 @@ void PrismaUIManager::Show() {
 
     hiddenByUser = false;
     hiddenByIdle = false;
+    ResetFocusedInputState();
+    lastExcitementPollMs = 0;
     ResetIdleTimer();
     ApplyVisibility();
 
@@ -505,6 +902,7 @@ void PrismaUIManager::Hide() {
     hiddenByUser = false;
     hiddenByIdle = false;
     lastActivityTime.store(0);
+    ResetFocusedInputState();
 
     if (IsViewValid()) {
         magelight->InvokeJS(view, "handleControlEnd()");
@@ -596,14 +994,20 @@ void PrismaUIManager::PollUpdate(uint64_t generation) {
         return;
     }
 
-    if (isCurrentlyVisible) {
+    const int64_t nowMs = SteadyNowMs();
+    PollFocusedInput(nowMs);
+
+    if (isCurrentlyVisible && (nowMs - lastExcitementPollMs >= 100)) {
+        lastExcitementPollMs = nowMs;
         UpdateExcitements();
     }
     CheckIdleTimeout();
 
+    const int sleepMs = (HasFocus() || hasKeyFocus.load()) ? 25 : 100;
+
     // Sleep in a background thread to avoid blocking the main game loop
-    std::thread([this, generation]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::thread([this, generation, sleepMs]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
 
         // Re-schedule PollUpdate on the main thread
         if (isPolling && pollGeneration.load() == generation) {
@@ -859,7 +1263,7 @@ void PrismaUIManager::OnControlEvent(OstimNG_API::Thread::Controls controlType, 
             return;
         }
 
-        if (manager->HasFocus() || manager->hasKeyFocus.load()) {
+        if ((manager->HasFocus() || manager->hasKeyFocus.load()) && manager->IsMagelightCapturingGamepad()) {
             return;
         }
 
@@ -1299,11 +1703,34 @@ void PrismaUIManager::HandleActionOnGameThread(const std::string& data) {
             bool shouldFocus = (payload.contains("shouldFocus") && payload["shouldFocus"].is_boolean()) ? payload["shouldFocus"].get<bool>() : false;
             SetFocus(shouldFocus);
         } else if (action == "toggleFocus") {
-            SetFocus(!HasFocus());
+            ToggleFocusDebounced();
         } else if (action == "toggleInspector") {
-            ToggleInspector();
+            ToggleInspectorDebounced();
         } else if (action == "toggleHideUI") {
             ToggleHideUI();
+        } else if (action == "endScene") {
+            SetFocus(false);
+            uint32_t threadID = dataProvider->GetCurrentThreadID();
+            if (threadID == 0) {
+                dataProvider->StopThread(0);
+                SKSE::log::info("endScene: stopping player thread");
+            } else {
+                SKSE::log::warn("Cannot end scene: not on player thread (threadID={})", threadID);
+            }
+        } else if (action == "adjustSpeed") {
+            auto payload = actionData.value("payload", json::object());
+            int32_t delta = (payload.contains("delta") && payload["delta"].is_number()) ? payload["delta"].get<int32_t>() : 0;
+            uint32_t threadID = dataProvider->GetCurrentThreadID();
+            if (threadID == 0 && delta != 0) {
+                dataProvider->AdjustSpeed(0, delta);
+                UpdateThreadStatus();
+            }
+        } else if (action == "toggleAutoMode") {
+            uint32_t threadID = dataProvider->GetCurrentThreadID();
+            if (threadID == 0) {
+                dataProvider->ToggleAutoMode(0);
+                UpdateThreadStatus();
+            }
         } else if (action == "saveLayout") {
             auto payload = actionData.value("payload", json::object());
             auto* settings = Settings::GetSingleton();

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <string>
+#include <unordered_map>
 
 class PrismaUIManager
     : public RE::BSTEventSink<RE::InputEvent*>
@@ -72,9 +73,25 @@ private:
     OStimDataProvider::KeyData cachedKeys{};
     bool hasCachedKeys = false;
     std::array<std::atomic<int64_t>, 16> lastDirectControlMs{};
+    std::atomic<int64_t> lastFocusToggleMs{0};
+    std::atomic<int64_t> lastInspectorToggleMs{0};
+    int64_t lastExcitementPollMs = 0;
+    bool wasFocusedLastPoll = false;
+    std::unordered_map<uint32_t, bool> prevPolledKeyDown;
+    uint32_t prevXInputMask = 0xFFFFFFFFu;
+    int xinputRepeatDir = 0;
+    int64_t xinputNextRepeatMs = 0;
+    float xinputRightStickAcc = 0.0f;
+    int64_t lastXInputProbeMs = 0;
+    int activeXInputSlot = -1;
 
     void NoteDirectControl(OstimNG_API::Thread::Controls control);
     bool WasRecentlyHandledDirectly(OstimNG_API::Thread::Controls control, int64_t eventTimeMs) const;
+    void ToggleFocusDebounced();
+    void ToggleInspectorDebounced();
+    bool IsMagelightCapturingGamepad() const;
+    void PollFocusedInput(int64_t nowMs);
+    void ResetFocusedInputState();
 
     void StartPolling();
     void StopPolling();

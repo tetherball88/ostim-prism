@@ -6,10 +6,12 @@
 
 - **Play Directly with a Controller or Mouse (No Focus Mode Required)** — You can now browse and control scenes right away using the controller, mouse, or keyboard buttons configured in your OStim MCM, without needing to switch into Focus / Cursor Mode first. Also works seamlessly with controller remapping mods like **Complete Controller Setup** and **Gamepad++**.
 - **Right-Stick Scrolling & Arrow Key Support in Focus Mode** — When Focus Mode is active, you can now scroll long lists and icon grids with the controller's Right Stick, toggle the gamepad cursor by clicking the Right Stick to drag or resize panels, and navigate with standard keyboard **Arrow Keys** and **Enter** in addition to your OStim hotkeys.
+- **Full Scene Controls & Option to Disable Focus Mode** — Ending a scene, changing animation speed, and toggling Auto-Mode with your OStim hotkeys now work directly even while Focus Mode is active. You can also set `ToggleFocus = 0` (or leave it empty) in `OStimPrism.ini` if you play strictly on a controller and want to disable Focus Mode completely.
 
 ### Fixed
 
 - **Controller & Mouse Hotkeys in `OStimPrism.ini`** — Fixed `ToggleFocus` and `ToggleInspector` ignoring controller and mouse button codes (such as setting `ToggleFocus = 279` for the controller Y button).
+- **Reliable `Left Alt` Toggle & Controller Continuity in Focus Mode** — Fixed `Left Alt` failing to toggle Focus Mode back off to camera control, and fixed controllers becoming unresponsive inside Focus Mode when **Auto Input Switch** switches input focus on a keyboard hotkey press.
 - **Exiting Menus & Focus Mode Cleanly** — Fixed getting stuck in Focus Mode or inside the Search and Alignment menus; pressing **B** on a controller or **Esc** on a keyboard now cleanly backs out of submenus and exits Focus Mode, and the Alignment menu's **Close** button now properly closes the menu.
 - **HUD Auto-Hide Wakeup** — Using OStim's Pull Out, Auto-Mode, or FreeCam controls now counts as activity so the HUD wakes back up and resets its idle timer.
 - **Tween Menu (`Tab`), Skills, Level-Up & MessageBox Menus** — Added `TweenMenu`, `StatsMenu`, `LevelUp Menu`, and `MessageBoxMenu` to `TrackedMenus` so OStim Prism cleanly hides while they are open instead of overlapping and blocking input.

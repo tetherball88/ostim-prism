@@ -5,6 +5,26 @@
 #include "OstimNG-API-Thread.h"
 #include "UIUtil.h"
 
+namespace {
+    struct NoOpCallback final : RE::BSScript::IStackCallbackFunctor {
+        void operator()(RE::BSScript::Variable) override {}
+        void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
+    };
+
+    void DispatchOThreadIntCall(const char* methodName, uint32_t threadID) {
+        const auto* skyrimVM = RE::SkyrimVM::GetSingleton();
+        auto vm = skyrimVM ? skyrimVM->GetVMRuntimeData().impl : nullptr;
+        if (!vm) {
+            SKSE::log::warn("DispatchOThreadIntCall({}): VM unavailable", methodName);
+            return;
+        }
+        auto* args = RE::MakeFunctionArguments(static_cast<int>(threadID));
+        RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb = RE::make_smart<NoOpCallback>();
+        vm->DispatchStaticCall("OThread", methodName, args, cb);
+        delete args;
+    }
+}
+
 void OStimDataProvider::Initialize() {
     ostimAPI = OstimNG_API::Thread::GetAPI("OStim Prism", REL::Version(1, 0, 0));
 
@@ -289,6 +309,27 @@ OStimDataProvider::ThreadStatusData OStimDataProvider::GetThreadStatus(uint32_t 
 bool OStimDataProvider::SetSpeed(uint32_t threadID, int32_t speed) {
     if (!ostimAPI) return false;
     return ostimAPI->SetSpeed(threadID, speed) == OstimNG_API::Thread::APIResult::OK;
+}
+
+bool OStimDataProvider::AdjustSpeed(uint32_t threadID, int32_t delta) {
+    if (!ostimAPI) return false;
+    const int32_t cur = ostimAPI->GetCurrentSpeed(threadID);
+    const int32_t maxSpd = ostimAPI->GetMaxSpeed(threadID);
+    const int32_t next = std::clamp(cur + delta, 0, std::max<int32_t>(0, maxSpd));
+    if (next == cur) {
+        return false;
+    }
+    return SetSpeed(threadID, next);
+}
+
+void OStimDataProvider::StopThread(uint32_t threadID) {
+    DispatchOThreadIntCall("Stop", threadID);
+}
+
+void OStimDataProvider::ToggleAutoMode(uint32_t threadID) {
+    if (!ostimAPI) return;
+    const bool isAuto = ostimAPI->IsAutoMode(threadID);
+    DispatchOThreadIntCall(isAuto ? "StopAutoMode" : "StartAutoMode", threadID);
 }
 
 void OStimDataProvider::SetActorAdditionalProgress(RE::FormID actorID, float progress) {

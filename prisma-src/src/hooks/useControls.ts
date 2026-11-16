@@ -28,22 +28,69 @@ const pressOnlyControls = new Set(['yes', 'esc', 'toggle', 'no', 'tab']);
 export const useControls = () => {
   useEffect(() => {
     const mapKeyCodeToControl = (keyCode: number, isSearchInput = false): string | null => {
-      const { keys } = useOStimStore.getState();
-      if (keyCode === keys.keyUp) return 'up';
-      if (keyCode === keys.keyDown) return 'down';
-      if (keyCode === keys.keyLeft && (!isSearchInput || keyCode !== 37)) return 'left';
-      if (keyCode === keys.keyRight && (!isSearchInput || keyCode !== 39)) return 'right';
-      if (keyCode === keys.keyYes) return 'yes';
-      if (keyCode === keys.keyToggle) return 'toggle';
-      if (keyCode === keys.keyEnd || keyCode === keys.keyPullOut) return 'no';
       if (keyCode === 27) return 'esc';
       if (keyCode === 9) return 'tab';
       if (keyCode === 38) return 'up';
       if (keyCode === 40) return 'down';
       if (keyCode === 13) return 'yes';
-      if (!isSearchInput && keyCode === 37) return 'left';
-      if (!isSearchInput && keyCode === 39) return 'right';
+      if (isSearchInput) return null;
+
+      const { keys } = useOStimStore.getState();
+      if (keyCode === keys.keyUp) return 'up';
+      if (keyCode === keys.keyDown) return 'down';
+      if (keyCode === keys.keyLeft) return 'left';
+      if (keyCode === keys.keyRight) return 'right';
+      if (keyCode === keys.keyYes) return 'yes';
+      if (keyCode === keys.keyToggle) return 'toggle';
+      if (keyCode === keys.keyPullOut) return 'no';
+      if (keyCode === 37) return 'left';
+      if (keyCode === 39) return 'right';
       return null;
+    };
+
+    const dispatchHotkeyAction = (code: number, allowMenuAndSceneHotkeys: boolean): boolean => {
+      if (code <= 0) return false;
+      const { keys } = useOStimStore.getState();
+      if (keys.toggleFocusKeys?.includes(code)) {
+        window.sendAction?.(JSON.stringify({ action: 'toggleFocus' }));
+        return true;
+      }
+      if (keys.toggleInspectorKeys?.includes(code)) {
+        window.sendAction?.(JSON.stringify({ action: 'toggleInspector' }));
+        return true;
+      }
+      if (code === keys.keyHideUI) {
+        window.sendAction?.(JSON.stringify({ action: 'toggleHideUI' }));
+        return true;
+      }
+      if (!allowMenuAndSceneHotkeys) {
+        return false;
+      }
+      if (code === keys.keySearch) {
+        window.showMenu('searchMenu');
+        return true;
+      }
+      if (code === keys.keyAlignment) {
+        window.showMenu('alignMenu');
+        return true;
+      }
+      if (code === keys.keyEnd) {
+        window.sendAction?.(JSON.stringify({ action: 'endScene' }));
+        return true;
+      }
+      if (code === keys.keySpeedUp) {
+        window.sendAction?.(JSON.stringify({ action: 'adjustSpeed', payload: { delta: 1 } }));
+        return true;
+      }
+      if (code === keys.keySpeedDown) {
+        window.sendAction?.(JSON.stringify({ action: 'adjustSpeed', payload: { delta: -1 } }));
+        return true;
+      }
+      if (code === keys.keyAutoMode) {
+        window.sendAction?.(JSON.stringify({ action: 'toggleAutoMode' }));
+        return true;
+      }
+      return false;
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -64,39 +111,14 @@ export const useControls = () => {
 
       // In-game (Magelight UI mode): keyboard events arrive directly on window
       const keyCode = getNormalizedKeyCode(e);
-      const { keys, activeMenu } = useOStimStore.getState();
+      const { activeMenu } = useOStimStore.getState();
       const isSearchInput =
         document.activeElement instanceof HTMLInputElement &&
         document.activeElement.classList.contains('search-input');
 
-      if (!e.repeat) {
-        if (keys.toggleFocusKeys?.includes(keyCode)) {
-          e.preventDefault();
-          window.sendAction?.(JSON.stringify({ action: 'toggleFocus' }));
-          return;
-        }
-        if (keys.toggleInspectorKeys?.includes(keyCode)) {
-          e.preventDefault();
-          window.sendAction?.(JSON.stringify({ action: 'toggleInspector' }));
-          return;
-        }
-        if (keyCode === keys.keyHideUI) {
-          e.preventDefault();
-          window.sendAction?.(JSON.stringify({ action: 'toggleHideUI' }));
-          return;
-        }
-        if (!isSearchInput) {
-          if (keyCode === keys.keySearch) {
-            e.preventDefault();
-            window.showMenu('searchMenu');
-            return;
-          }
-          if (keyCode === keys.keyAlignment) {
-            e.preventDefault();
-            window.showMenu('alignMenu');
-            return;
-          }
-        }
+      if (!e.repeat && dispatchHotkeyAction(keyCode, !isSearchInput)) {
+        e.preventDefault();
+        return;
       }
 
       const controlStr = mapKeyCodeToControl(keyCode, isSearchInput);
@@ -167,29 +189,9 @@ export const useControls = () => {
       }
       if (ev.phase === 'press' || ev.phase === 'repeat') {
         const skseCode = gamepadControlToSkseKeyCode[ev.control] ?? 0;
-        const { keys } = useOStimStore.getState();
 
-        if (ev.phase === 'press' && skseCode) {
-          if (keys.toggleFocusKeys?.includes(skseCode)) {
-            window.sendAction?.(JSON.stringify({ action: 'toggleFocus' }));
-            return true;
-          }
-          if (keys.toggleInspectorKeys?.includes(skseCode)) {
-            window.sendAction?.(JSON.stringify({ action: 'toggleInspector' }));
-            return true;
-          }
-          if (skseCode === keys.keyHideUI) {
-            window.sendAction?.(JSON.stringify({ action: 'toggleHideUI' }));
-            return true;
-          }
-          if (skseCode === keys.keySearch) {
-            window.showMenu('searchMenu');
-            return true;
-          }
-          if (skseCode === keys.keyAlignment) {
-            window.showMenu('alignMenu');
-            return true;
-          }
+        if (ev.phase === 'press' && skseCode && dispatchHotkeyAction(skseCode, true)) {
+          return true;
         }
 
         let controlStr: string | null = null;

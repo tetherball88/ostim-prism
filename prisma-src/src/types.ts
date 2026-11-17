@@ -130,7 +130,7 @@ declare global {
         /** Called by Skyrim to update thread control state and speed. */
         updateThreadStatus(status: ThreadStatus | string): void;
         /** Called by Skyrim to send a control input (up/down/left/yes). */
-        handleControl(control: string): void;
+        handleControl(control: string, isRepeat?: boolean): boolean;
         handleControlStart(control: string): void;
         handleControlEnd(): void;
 
@@ -141,6 +141,7 @@ declare global {
         magelight?: {
             gamepad?: {
                 onAction(handler: (ev: MagelightGamepadEvent) => boolean | void): () => void;
+                getState?(): { device?: string; active?: boolean; mode?: string };
             };
         };
     }

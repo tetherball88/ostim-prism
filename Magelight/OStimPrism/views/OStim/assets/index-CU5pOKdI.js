@@ -9654,6 +9654,14 @@
         }
         return false;
       };
+      const GAMEPAD_KEY_SUPPRESS_MS = 250;
+      const GAMEPAD_REPEAT_DELAY_MS = 450;
+      const GAMEPAD_REPEAT_INTERVAL_MS = 115;
+      let lastGamepadActionAt = -Infinity;
+      let gamepadHeldAction = null;
+      let gamepadHeldControl = null;
+      let gamepadHeldSince = 0;
+      let lastGamepadRepeatAt = 0;
       const handleKeyDown = (e) => {
         var _a2;
         if (document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("block-scale-input")) {
@@ -9662,6 +9670,14 @@
         const keyCode = getNormalizedKeyCode(e);
         const { activeMenu } = useOStimStore.getState();
         const isSearchInput = document.activeElement instanceof HTMLInputElement && document.activeElement.classList.contains("search-input");
+        const gamepadActiveRecently = performance.now() - lastGamepadActionAt < GAMEPAD_KEY_SUPPRESS_MS;
+        if (!isSearchInput && gamepadActiveRecently) {
+          const suppressedControl = mapKeyCodeToControl(keyCode, false);
+          if (keyCode === 27 || keyCode === 9 || activeMenu === "alignMenu" && (suppressedControl === "up" || suppressedControl === "down")) {
+            e.preventDefault();
+          }
+          return;
+        }
         if (!e.repeat && dispatchHotkeyAction(keyCode, !isSearchInput)) {
           e.preventDefault();
           return;
@@ -9689,20 +9705,30 @@
         e.preventDefault();
         const { focusBlock, activeMenu, settings } = useOStimStore.getState();
         if (focusBlock === "menu" && (activeMenu === "navigation" || activeMenu === "utilityOptions") && settings.enableGridMenu) {
-          window.handleControl(e.deltaY > 0 ? "wheelup" : "wheeldown");
+          window.handleControl(e.deltaY > 0 ? "wheelup" : "wheeldown", true);
         } else {
-          window.handleControl(e.deltaY > 0 ? "up" : "down");
+          window.handleControl(e.deltaY > 0 ? "up" : "down", true);
         }
       };
       let rightStickScrollAcc = 0;
       const disposeGamepad = (_b = (_a = window.magelight) == null ? void 0 : _a.gamepad) == null ? void 0 : _b.onAction((ev) => {
-        var _a2, _b2;
+        var _a2, _b2, _c;
         if (ev.phase === "cancel") {
           rightStickScrollAcc = 0;
+          gamepadHeldAction = null;
+          gamepadHeldControl = null;
+          gamepadHeldSince = 0;
+          lastGamepadRepeatAt = 0;
           (_a2 = window.handleControlEnd) == null ? void 0 : _a2.call(window);
           return true;
         }
         if (ev.phase === "release") {
+          if (!gamepadHeldControl || ev.control === gamepadHeldControl || ev.action === gamepadHeldAction) {
+            gamepadHeldAction = null;
+            gamepadHeldControl = null;
+            gamepadHeldSince = 0;
+            lastGamepadRepeatAt = 0;
+          }
           (_b2 = window.handleControlEnd) == null ? void 0 : _b2.call(window);
           return true;
         }
@@ -9717,14 +9743,17 @@
             rightStickScrollAcc -= step;
             const { focusBlock, activeMenu, settings } = useOStimStore.getState();
             if (focusBlock === "menu" && (activeMenu === "navigation" || activeMenu === "utilityOptions") && settings.enableGridMenu) {
-              window.handleControl(step > 0 ? "wheelup" : "wheeldown");
+              window.handleControl(step > 0 ? "wheelup" : "wheeldown", true);
             } else {
-              window.handleControl(step > 0 ? "up" : "down");
+              window.handleControl(step > 0 ? "up" : "down", true);
             }
           }
           return true;
         }
         if (ev.phase === "press" || ev.phase === "repeat") {
+          const now = performance.now();
+          lastGamepadActionAt = now;
+          (_c = window.handleControlEnd) == null ? void 0 : _c.call(window);
           const skseCode = gamepadControlToSkseKeyCode[ev.control] ?? 0;
           if (ev.phase === "press" && skseCode && dispatchHotkeyAction(skseCode, true)) {
             return true;
@@ -9757,8 +9786,25 @@
             controlStr = mapKeyCodeToControl(skseCode, false);
           }
           if (controlStr) {
-            if (ev.phase === "press" || !pressOnlyControls.has(controlStr)) {
-              window.handleControl(controlStr);
+            if (ev.phase === "press") {
+              const executed = window.handleControl(controlStr, false);
+              if (executed && !pressOnlyControls.has(controlStr)) {
+                gamepadHeldAction = controlStr;
+                gamepadHeldControl = ev.control;
+                gamepadHeldSince = now;
+                lastGamepadRepeatAt = 0;
+              }
+            } else if (!pressOnlyControls.has(controlStr)) {
+              if (gamepadHeldAction !== controlStr) {
+                gamepadHeldAction = controlStr;
+                gamepadHeldControl = ev.control;
+                gamepadHeldSince = now - 350;
+                lastGamepadRepeatAt = 0;
+              }
+              if (now - gamepadHeldSince >= GAMEPAD_REPEAT_DELAY_MS && now - lastGamepadRepeatAt >= GAMEPAD_REPEAT_INTERVAL_MS) {
+                lastGamepadRepeatAt = now;
+                window.handleControl(controlStr, true);
+              }
             }
             return true;
           }
@@ -10191,8 +10237,36 @@
         store2.updateActiveMenu(menu);
       }
     };
-    window.handleControl = (control) => {
+    const SAME_CONTROL_DEBOUNCE_MS = 150;
+    const CROSS_DIR_DEBOUNCE_MS = 60;
+    const HOLD_INITIAL_DELAY_MS = 450;
+    const HOLD_REPEAT_INTERVAL_MS = 115;
+    const lastExecutedAt = {};
+    let lastAnyDirectionalDiscreteAt = -Infinity;
+    window.handleControl = (control, isRepeat = false) => {
+      const lower = control.toLowerCase();
+      if (lower === "wheelup" || lower === "wheeldown") {
+        store2.handleControlInput(control);
+        return true;
+      }
+      const now = performance.now();
+      const isDirectional = lower === "up" || lower === "down" || lower === "left" || lower === "right";
+      const isDebouncedAction = isDirectional || lower === "yes" || lower === "no" || lower === "esc" || lower === "toggle" || lower === "tab";
+      if (!isRepeat && isDebouncedAction) {
+        const prevSame = lastExecutedAt[lower] ?? -Infinity;
+        if (now - prevSame < SAME_CONTROL_DEBOUNCE_MS) {
+          return false;
+        }
+        if (isDirectional && now - lastAnyDirectionalDiscreteAt < CROSS_DIR_DEBOUNCE_MS) {
+          return false;
+        }
+      }
+      lastExecutedAt[lower] = now;
+      if (!isRepeat && isDirectional) {
+        lastAnyDirectionalDiscreteAt = now;
+      }
       store2.handleControlInput(control);
+      return true;
     };
     let repeatTimer = null;
     let repeatInterval = null;
@@ -10234,10 +10308,14 @@
           return;
         }
         stopRepeat();
-        activeHoldControl = lowerCaseControl;
         const initialFocusBlock = recentStore.focusBlock;
-        store2.handleControlInput(control);
+        const executed = window.handleControl(control, false);
+        if (!executed) {
+          return;
+        }
+        activeHoldControl = lowerCaseControl;
         if (useOStimStore.getState().focusBlock !== initialFocusBlock) {
+          activeHoldControl = null;
           return;
         }
         repeatTimer = setTimeout(() => {
@@ -10246,15 +10324,15 @@
               return;
             }
             const prevFocusBlock = useOStimStore.getState().focusBlock;
-            store2.handleControlInput(control);
+            window.handleControl(control, true);
             if (useOStimStore.getState().focusBlock !== prevFocusBlock) {
               stopRepeat();
             }
-          }, 50);
-        }, 400);
+          }, HOLD_REPEAT_INTERVAL_MS);
+        }, HOLD_INITIAL_DELAY_MS);
       } else {
         stopRepeat();
-        store2.handleControlInput(control);
+        window.handleControl(control, false);
       }
     };
     window.handleControlEnd = () => {

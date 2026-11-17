@@ -1,3 +1,4 @@
+#include "PCH.h"
 #include "PrismaUIManager.h"
 #include "PortraitManager.h"
 #include "Settings.h"
@@ -68,6 +69,41 @@ namespace {
         }
     }
 
+    bool IsVkDown(int vk) {
+        return vk > 0 && (GetAsyncKeyState(vk) & 0x8000) != 0;
+    }
+
+    bool IsScanCodePhysicallyDown(uint32_t code) {
+        if (code == 0 || code >= 266) {
+            return false;
+        }
+        if (code == 256) {
+            return IsVkDown(VK_LBUTTON);
+        }
+        if (code >= 257 && code <= 260) {
+            return IsVkDown(DxScanCodeToVirtualKey(code));
+        }
+        if (code >= 256) {
+            return false;
+        }
+        switch (code) {
+            case 71: return IsVkDown(VK_NUMPAD7) || IsVkDown(VK_HOME);
+            case 72: return IsVkDown(VK_NUMPAD8) || IsVkDown(VK_UP);
+            case 73: return IsVkDown(VK_NUMPAD9) || IsVkDown(VK_PRIOR);
+            case 74: return IsVkDown(VK_SUBTRACT);
+            case 75: return IsVkDown(VK_NUMPAD4) || IsVkDown(VK_LEFT);
+            case 76: return IsVkDown(VK_NUMPAD5) || IsVkDown(VK_CLEAR);
+            case 77: return IsVkDown(VK_NUMPAD6) || IsVkDown(VK_RIGHT);
+            case 78: return IsVkDown(VK_ADD);
+            case 79: return IsVkDown(VK_NUMPAD1) || IsVkDown(VK_END);
+            case 80: return IsVkDown(VK_NUMPAD2) || IsVkDown(VK_DOWN);
+            case 81: return IsVkDown(VK_NUMPAD3) || IsVkDown(VK_NEXT);
+            case 82: return IsVkDown(VK_NUMPAD0) || IsVkDown(VK_INSERT);
+            case 83: return IsVkDown(VK_DECIMAL) || IsVkDown(VK_DELETE);
+            default: return IsVkDown(DxScanCodeToVirtualKey(code));
+        }
+    }
+
     bool QueryXInputState(DWORD slot, REX::W32::XINPUT_STATE& outState) {
         using XInputGetStateFn = DWORD(WINAPI*)(DWORD, REX::W32::XINPUT_STATE*);
         static XInputGetStateFn s_fn = []() -> XInputGetStateFn {
@@ -126,12 +162,12 @@ namespace {
         return true;
     }
 
-    const char* DirectionalScriptForCode(int dirCode) {
+    const char* DirectionalScriptForCode(int dirCode, bool isRepeat) {
         switch (dirCode) {
-            case 266: return "handleControl('up')";
-            case 267: return "handleControl('down')";
-            case 268: return "handleControl('left')";
-            case 269: return "handleControl('right')";
+            case 266: return isRepeat ? "handleControl('up', true)" : "handleControl('up', false)";
+            case 267: return isRepeat ? "handleControl('down', true)" : "handleControl('down', false)";
+            case 268: return isRepeat ? "handleControl('left', true)" : "handleControl('left', false)";
+            case 269: return isRepeat ? "handleControl('right', true)" : "handleControl('right', false)";
             default:  return nullptr;
         }
     }
@@ -269,6 +305,15 @@ void PrismaUIManager::ResetFocusedInputState() {
     xinputRightStickAcc = 0.0f;
 }
 
+void PrismaUIManager::EndUnfocusedHold() {
+    if (activeUnfocusedHoldKey != 0) {
+        activeUnfocusedHoldKey = 0;
+        if (IsViewValid()) {
+            magelight->InvokeJS(view, "handleControlEnd()");
+        }
+    }
+}
+
 void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
     if (!IsViewValid() || currentThreadID == INVALID_THREAD_ID || openMenuCount > 0 || hiddenByMenu || !IsGameWindowForeground()) {
         ResetFocusedInputState();
@@ -281,11 +326,10 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
 
     auto pollHotkeyList = [&](const std::vector<uint32_t>& keys, auto onTrigger) {
         for (uint32_t code : keys) {
-            const int vk = DxScanCodeToVirtualKey(code);
-            if (vk <= 0) {
+            if (code == 0 || code >= 266) {
                 continue;
             }
-            const bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+            const bool down = IsScanCodePhysicallyDown(code);
             if (!focused || firstFocusedTick) {
                 prevPolledKeyDown[code] = down;
                 continue;
@@ -384,14 +428,17 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
                     return;
                 }
                 if (code == static_cast<uint32_t>(cachedKeys.keyHideUI)) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::KEY_HIDE);
                     ToggleHideUI();
                     handledCustom = true;
                 } else if (code == static_cast<uint32_t>(cachedKeys.keySearch)) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::SearchMenu);
                     if (!hiddenByUser) {
                         magelight->InvokeJS(view, "showMenu('searchMenu')");
                     }
                     handledCustom = true;
                 } else if (code == static_cast<uint32_t>(cachedKeys.keyAlignment)) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::AlignMenu);
                     if (!hiddenByUser) {
                         magelight->InvokeJS(view, "showMenu('alignMenu')");
                     }
@@ -415,12 +462,15 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
                     }
                     handledCustom = true;
                 } else if (code == static_cast<uint32_t>(cachedKeys.keyYes)) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::Yes);
                     magelight->InvokeJS(view, "handleControl('yes')");
                     handledCustom = true;
                 } else if (code == static_cast<uint32_t>(cachedKeys.keyToggle)) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::Toggle);
                     magelight->InvokeJS(view, "handleControl('toggle')");
                     handledCustom = true;
                 } else if (code == static_cast<uint32_t>(cachedKeys.keyPullOut)) {
+                    NoteDirectControl(OstimNG_API::Thread::Controls::No);
                     magelight->InvokeJS(view, "handleControl('no')");
                     handledCustom = true;
                 }
@@ -434,10 +484,12 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
                     code == static_cast<uint32_t>(cachedKeys.keyRight));
                 if (!isCustomDir) {
                     if (code == 276) {
+                        NoteDirectControl(OstimNG_API::Thread::Controls::Yes);
                         magelight->InvokeJS(view, "handleControl('yes')");
                     } else if (code == 277) {
                         magelight->InvokeJS(view, "handleControl('esc')");
                     } else if (code == 278) {
+                        NoteDirectControl(OstimNG_API::Thread::Controls::Toggle);
                         magelight->InvokeJS(view, "handleControl('toggle')");
                     }
                 }
@@ -449,8 +501,28 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
         return code >= 266u && code <= 281u && (mask & (1u << (code - 266u))) != 0;
     };
 
+    auto isDirectionHeld = [&](int dirCode) {
+        if (hasCachedKeys) {
+            uint32_t customCode = 0;
+            switch (dirCode) {
+                case 266: customCode = static_cast<uint32_t>(cachedKeys.keyUp); break;
+                case 267: customCode = static_cast<uint32_t>(cachedKeys.keyDown); break;
+                case 268: customCode = static_cast<uint32_t>(cachedKeys.keyLeft); break;
+                case 269: customCode = static_cast<uint32_t>(cachedKeys.keyRight); break;
+                default:  break;
+            }
+            if (isMaskPressed(customCode)) {
+                return true;
+            }
+        }
+        return isMaskPressed(static_cast<uint32_t>(dirCode));
+    };
+
     int dir = 0;
-    if (hasCachedKeys) {
+    if (xinputRepeatDir >= 266 && xinputRepeatDir <= 269 && isDirectionHeld(xinputRepeatDir)) {
+        dir = xinputRepeatDir;
+    }
+    if (dir == 0 && hasCachedKeys) {
         if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyUp)))         dir = 266;
         else if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyDown)))  dir = 267;
         else if (isMaskPressed(static_cast<uint32_t>(cachedKeys.keyLeft)))  dir = 268;
@@ -471,20 +543,32 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
         }
     }
 
+    auto noteDirControl = [this](int dirCode) {
+        switch (dirCode) {
+            case 266: NoteDirectControl(OstimNG_API::Thread::Controls::Up); break;
+            case 267: NoteDirectControl(OstimNG_API::Thread::Controls::Down); break;
+            case 268: NoteDirectControl(OstimNG_API::Thread::Controls::Left); break;
+            case 269: NoteDirectControl(OstimNG_API::Thread::Controls::Right); break;
+            default:  break;
+        }
+    };
+
     if (dir == 0) {
         xinputRepeatDir = 0;
         xinputNextRepeatMs = 0;
     } else if (dir != xinputRepeatDir) {
         xinputRepeatDir = dir;
-        xinputNextRepeatMs = nowMs + 350;
+        xinputNextRepeatMs = nowMs + 450;
         ResetIdleTimer();
-        if (const char* js = DirectionalScriptForCode(dir)) {
+        noteDirControl(dir);
+        if (const char* js = DirectionalScriptForCode(dir, false)) {
             magelight->InvokeJS(view, js);
         }
     } else if (nowMs >= xinputNextRepeatMs) {
-        xinputNextRepeatMs = nowMs + 90;
+        xinputNextRepeatMs = nowMs + 115;
         ResetIdleTimer();
-        if (const char* js = DirectionalScriptForCode(dir)) {
+        noteDirControl(dir);
+        if (const char* js = DirectionalScriptForCode(dir, true)) {
             magelight->InvokeJS(view, js);
         }
     }
@@ -499,7 +583,7 @@ void PrismaUIManager::PollFocusedInput(int64_t nowMs) {
             const int step = (xinputRightStickAcc > 0.0f) ? 1 : -1;
             xinputRightStickAcc -= static_cast<float>(step);
             ResetIdleTimer();
-            magelight->InvokeJS(view, step > 0 ? "handleControl('up')" : "handleControl('down')");
+            magelight->InvokeJS(view, step > 0 ? "handleControl('up', true)" : "handleControl('down', true)");
         }
     }
 
@@ -621,6 +705,7 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
 
     if (openMenuCount > 0 && !hiddenByMenu) {
         hiddenByMenu = true;
+        EndUnfocusedHold();
         if (currentThreadID != INVALID_THREAD_ID) {
             SKSE::log::info("Menu opened — hiding Magelight UI");
             ApplyVisibility();
@@ -632,6 +717,7 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(
             // Give a fresh idle window after returning from a menu
             hiddenByIdle = false;
             ResetIdleTimer();
+            UpdateKeys();
             ApplyVisibility();
         }
     }
@@ -655,6 +741,7 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
     // to the web page (which handles them in useControls.ts) while Magelight mutes
     // DirectInput and GetAsyncKeyState for other mods.
     if (HasFocus() || hasKeyFocus.load()) {
+        EndUnfocusedHold();
         return RE::BSEventNotifyControl::kContinue;
     }
 
@@ -675,6 +762,7 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
 
         // Ignore hotkeys while a tracked menu (e.g. Console) is open or no scene is active
         if (currentThreadID == INVALID_THREAD_ID || openMenuCount > 0 || hiddenByMenu) {
+            EndUnfocusedHold();
             continue;
         }
 
@@ -768,10 +856,20 @@ RE::BSEventNotifyControl PrismaUIManager::ProcessEvent(RE::InputEvent* const* a_
 
             if (controlStr) {
                 if (button->IsDown()) {
-                    std::string script = "handleControlStart('" + std::string(controlStr) + "')";
-                    magelight->InvokeJS(view, script.c_str());
-                } else if (button->IsUp()) {
-                    magelight->InvokeJS(view, "handleControlEnd()");
+                    const bool canHold = (key >= 266 && key <= 281) || IsScanCodePhysicallyDown(key);
+                    if (canHold) {
+                        activeUnfocusedHoldKey = key;
+                        std::string script = "handleControlStart('" + std::string(controlStr) + "')";
+                        magelight->InvokeJS(view, script.c_str());
+                    } else {
+                        EndUnfocusedHold();
+                        std::string script = "handleControl('" + std::string(controlStr) + "', false)";
+                        magelight->InvokeJS(view, script.c_str());
+                    }
+                } else if (!button->IsPressed()) {
+                    if (activeUnfocusedHoldKey == key) {
+                        EndUnfocusedHold();
+                    }
                 }
             }
         }
@@ -902,6 +1000,7 @@ void PrismaUIManager::Hide() {
     hiddenByUser = false;
     hiddenByIdle = false;
     lastActivityTime.store(0);
+    activeUnfocusedHoldKey = 0;
     ResetFocusedInputState();
 
     if (IsViewValid()) {
@@ -948,6 +1047,7 @@ void PrismaUIManager::ApplyVisibility() {
     if (!IsViewValid()) return;
     bool shouldHide = (currentThreadID == INVALID_THREAD_ID) || hiddenByMenu || hiddenByUser || hiddenByIdle;
     if (shouldHide) {
+        EndUnfocusedHold();
         if (HasFocus()) {
             SetFocus(false);
         } else {
@@ -996,6 +1096,12 @@ void PrismaUIManager::PollUpdate(uint64_t generation) {
 
     const int64_t nowMs = SteadyNowMs();
     PollFocusedInput(nowMs);
+
+    if (!HasFocus() && !hasKeyFocus.load() && activeUnfocusedHoldKey != 0) {
+        if (!IsGameWindowForeground() || (activeUnfocusedHoldKey < 266 && !IsScanCodePhysicallyDown(activeUnfocusedHoldKey))) {
+            EndUnfocusedHold();
+        }
+    }
 
     if (isCurrentlyVisible && (nowMs - lastExcitementPollMs >= 100)) {
         lastExcitementPollMs = nowMs;
@@ -1240,7 +1346,7 @@ bool PrismaUIManager::WasRecentlyHandledDirectly(OstimNG_API::Thread::Controls c
         return false;
     }
     const int64_t lastMs = lastDirectControlMs[idx].load(std::memory_order_relaxed);
-    return lastMs > 0 && std::abs(eventTimeMs - lastMs) < 80;
+    return lastMs > 0 && std::abs(eventTimeMs - lastMs) < 200;
 }
 
 void PrismaUIManager::OnControlEvent(OstimNG_API::Thread::Controls controlType, uint32_t threadID, void* /*userData*/) {
@@ -1392,6 +1498,7 @@ void PrismaUIManager::OnMagelightEvent(const MAGELIGHT_API::EventData* ev, void*
 
         case MAGELIGHT_API::Event::UIModeEntered: {
             if (ev->view == manager->view) {
+                manager->EndUnfocusedHold();
                 manager->hasUIMode.store(true);
                 manager->hasKeyFocus.store(true);
                 manager->ResetIdleTimer();
@@ -1415,6 +1522,7 @@ void PrismaUIManager::OnMagelightEvent(const MAGELIGHT_API::EventData* ev, void*
 
         case MAGELIGHT_API::Event::KeyFocusGained: {
             if (ev->view == manager->view) {
+                manager->EndUnfocusedHold();
                 manager->hasKeyFocus.store(true);
                 manager->ResetIdleTimer();
                 SKSE::log::debug("Magelight key focus gained for view {} (from view {}, mod='{}')",

@@ -103,8 +103,47 @@ export function setupGameIntegration(store: StoreState) {
         }
     };
 
-    window.handleControl = (control: string) => {
+    const SAME_CONTROL_DEBOUNCE_MS = 150;
+    const CROSS_DIR_DEBOUNCE_MS = 60;
+    const HOLD_INITIAL_DELAY_MS = 450;
+    const HOLD_REPEAT_INTERVAL_MS = 115;
+
+    const lastExecutedAt: Record<string, number> = {};
+    let lastAnyDirectionalDiscreteAt = -Infinity;
+
+    window.handleControl = (control: string, isRepeat = false): boolean => {
+        const lower = control.toLowerCase();
+        if (lower === 'wheelup' || lower === 'wheeldown') {
+            store.handleControlInput(control);
+            return true;
+        }
+
+        const now = performance.now();
+        const isDirectional = lower === 'up' || lower === 'down' || lower === 'left' || lower === 'right';
+        const isDebouncedAction =
+            isDirectional ||
+            lower === 'yes' ||
+            lower === 'no' ||
+            lower === 'esc' ||
+            lower === 'toggle' ||
+            lower === 'tab';
+
+        if (!isRepeat && isDebouncedAction) {
+            const prevSame = lastExecutedAt[lower] ?? -Infinity;
+            if (now - prevSame < SAME_CONTROL_DEBOUNCE_MS) {
+                return false;
+            }
+            if (isDirectional && (now - lastAnyDirectionalDiscreteAt < CROSS_DIR_DEBOUNCE_MS)) {
+                return false;
+            }
+        }
+
+        lastExecutedAt[lower] = now;
+        if (!isRepeat && isDirectional) {
+            lastAnyDirectionalDiscreteAt = now;
+        }
         store.handleControlInput(control);
+        return true;
     };
 
     let repeatTimer: ReturnType<typeof setTimeout> | null = null;
@@ -153,10 +192,14 @@ export function setupGameIntegration(store: StoreState) {
             }
 
             stopRepeat();
-            activeHoldControl = lowerCaseControl;
             const initialFocusBlock = recentStore.focusBlock;
-            store.handleControlInput(control);
+            const executed = window.handleControl(control, false);
+            if (!executed) {
+                return;
+            }
+            activeHoldControl = lowerCaseControl;
             if (useOStimStore.getState().focusBlock !== initialFocusBlock) {
+                activeHoldControl = null;
                 return;
             }
             repeatTimer = setTimeout(() => {
@@ -165,15 +208,15 @@ export function setupGameIntegration(store: StoreState) {
                         return;
                     }
                     const prevFocusBlock = useOStimStore.getState().focusBlock;
-                    store.handleControlInput(control);
+                    window.handleControl(control, true);
                     if (useOStimStore.getState().focusBlock !== prevFocusBlock) {
                         stopRepeat();
                     }
-                }, 50);
-            }, 400);
+                }, HOLD_REPEAT_INTERVAL_MS);
+            }, HOLD_INITIAL_DELAY_MS);
         } else {
             stopRepeat();
-            store.handleControlInput(control);
+            window.handleControl(control, false);
         }
     };
 

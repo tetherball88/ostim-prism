@@ -84,6 +84,7 @@ private:
     float xinputRightStickAcc = 0.0f;
     int64_t lastXInputProbeMs = 0;
     int activeXInputSlot = -1;
+    uint32_t activeUnfocusedHoldKey = 0;
 
     void NoteDirectControl(OstimNG_API::Thread::Controls control);
     bool WasRecentlyHandledDirectly(OstimNG_API::Thread::Controls control, int64_t eventTimeMs) const;
@@ -92,6 +93,7 @@ private:
     bool IsMagelightCapturingGamepad() const;
     void PollFocusedInput(int64_t nowMs);
     void ResetFocusedInputState();
+    void EndUnfocusedHold();
 
     void StartPolling();
     void StopPolling();

@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.1.1
+
+### Fixed
+
+- **Controller D-Pad Multiple / Double Inputs** — Fixed a single D-Pad press registering as multiple steps and skipping past menu items:
+  - Added directional press debouncing and cross-axis rocker filtering to prevent physical D-Pad switch bounce and accidental diagonal grazes from triggering extra moves.
+  - Prevented duplicate inputs when Steam Input or controller remapping mods (**Gamepad++**, **Complete Controller Setup**, **DS4Windows**) send emulated keyboard presses or delayed control callbacks alongside native gamepad events.
+  - Tuned hold-to-repeat timing (`450ms` initial delay, `115ms` repeat interval) across Focus Mode and direct controller play so firm D-Pad taps always step once while holding still scrolls smoothly.
+  - Hardened release and focus-transition cleanup so simulated key taps and menu/focus switches never leave hold-to-repeat active.
+
+---
+
 ## v2.1.0
 
 ### Added
